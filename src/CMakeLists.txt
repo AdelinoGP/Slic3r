@@ -2,8 +2,9 @@ cmake_minimum_required (VERSION 2.8)
 project (slic3r)
 
 # only on newer GCCs: -ftemplate-backtrace-limit=0
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -DM_PI=3.14159265358979323846 -D_GLIBCXX_USE_C99 -DHAS_BOOL -DNOGDI -DBOOST_ASIO_DISABLE_KQUEUE")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -DM_PI=3.14159265358979323846 -DHAS_BOOL -DNOGDI -DBOOST_ASIO_DISABLE_KQUEUE")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -DSLIC3R_DEBUG")
+
 
 if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 4.7.0)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.7.3)
@@ -22,7 +23,8 @@ ENDIF(CMAKE_HOST_APPLE)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-find_package(Boost COMPONENTS system thread filesystem)
+set(Boost_NO_BOOST_CMAKE ON)
+find_package(Boost REQUIRED COMPONENTS system thread filesystem OPTIONAL_COMPONENTS nowide)
 
 set(LIBDIR ${CMAKE_CURRENT_SOURCE_DIR}/../xs/src/)
 
@@ -31,6 +33,7 @@ include_directories(${LIBDIR}/libslic3r)
 include_directories(${LIBDIR}/Slic3r/GUI/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/standalone/)
 include_directories(${LIBDIR}/admesh/)
+include_directories(${LIBDIR}/Zip/)
 include_directories(${LIBDIR}/BSpline/)
 include_directories(${LIBDIR}/expat/)
 include_directories(${LIBDIR}/poly2tri/)
@@ -73,6 +76,8 @@ add_library(libslic3r STATIC
     ${LIBDIR}/libslic3r/Model.cpp
     ${LIBDIR}/libslic3r/MotionPlanner.cpp
     ${LIBDIR}/libslic3r/MultiPoint.cpp
+    ${LIBDIR}/libslic3r/NonplanarFacet.cpp
+    ${LIBDIR}/libslic3r/NonplanarSurface.cpp
     ${LIBDIR}/libslic3r/PerimeterGenerator.cpp
     ${LIBDIR}/libslic3r/PlaceholderParser.cpp
     ${LIBDIR}/libslic3r/Point.cpp
@@ -89,8 +94,17 @@ add_library(libslic3r STATIC
     ${LIBDIR}/libslic3r/SurfaceCollection.cpp
     ${LIBDIR}/libslic3r/SVG.cpp
     ${LIBDIR}/libslic3r/TriangleMesh.cpp
-    ${LIBDIR}/libslic3r/Zip/ZipArchive.cpp
 )
+
+add_library(Zip STATIC
+    ${LIBDIR}/Zip/ZipArchive.cpp
+)
+target_compile_features(libslic3r PUBLIC cxx_std_11)
+target_include_directories(libslic3r SYSTEM PUBLIC ${SLIC3R_INCLUDES})
+target_include_directories(libslic3r PUBLIC ${LIBSLIC3R_INCLUDES})
+if (BOOST_NOWIDE_FOUND)
+    target_compile_options(libslic3r -DBOOST_INCLUDE_NOWIDE)
+endif()
 
 add_library(BSpline STATIC
     ${LIBDIR}/BSpline/BSpline.cpp
@@ -149,7 +163,7 @@ IF(CMAKE_HOST_UNIX)
     #set(Boost_LIBRARIES bsystem bthread bfilesystem)
 ENDIF(CMAKE_HOST_UNIX)
 
-target_link_libraries (slic3r libslic3r admesh BSpline clipper expat polypartition poly2tri ${Boost_LIBRARIES})
+target_link_libraries (slic3r libslic3r admesh BSpline Zip clipper expat polypartition poly2tri ${Boost_LIBRARIES})
 
 IF(wxWidgets_FOUND)
     MESSAGE("wx found!")
@@ -165,12 +179,20 @@ ENDIF(wxWidgets_FOUND)
 
 # Windows needs a compiled component for Boost.nowide
 IF (WIN32)
-    add_library(boost-nowide STATIC 
-        ${LIBDIR}/boost/nowide/iostream.cpp
-    )
+    if (NOT BOOST_NOWIDE_FOUND)
+        add_library(boost-nowide STATIC 
+            ${LIBDIR}/boost/nowide/iostream.cpp
+        )
+        if(MSVC)
+            # Tell boost pragmas to not rename nowide as we are building it
+            add_definitions(-DBOOST_NOWIDE_NO_LIB)
+        endif()    
+        target_link_libraries(slic3r boost-nowide)
+        target_include_directories(boost-nowide PUBLIC ${COMMON_INCLUDES})
+    endif()
 
     target_link_libraries(slic3r boost-nowide)
     target_link_libraries(extrude-tin boost-nowide)
 ENDIF(WIN32)
 
-target_link_libraries (extrude-tin libslic3r admesh BSpline clipper expat polypartition poly2tri ${Boost_LIBRARIES})
+target_link_libraries (extrude-tin libslic3r admesh BSpline Zip clipper expat polypartition poly2tri ${Boost_LIBRARIES})

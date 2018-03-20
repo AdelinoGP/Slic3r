@@ -13,12 +13,15 @@ class Line;
 class Linef;
 class MultiPoint;
 class Point;
+class Point3;
 class Pointf;
 class Pointf3;
 typedef Point Vector;
+typedef Point3 Vector3;
 typedef Pointf Vectorf;
 typedef Pointf3 Vectorf3;
 typedef std::vector<Point> Points;
+typedef std::vector<Point3> Point3s;
 typedef std::vector<Point*> PointPtrs;
 typedef std::vector<const Point*> PointConstPtrs;
 typedef std::vector<Pointf> Pointfs;
@@ -29,18 +32,23 @@ class Point
     public:
     coord_t x;
     coord_t y;
-    Point(coord_t _x = 0, coord_t _y = 0): x(_x), y(_y) {};
-    Point(int _x, int _y): x(_x), y(_y) {};
-    Point(long long _x, long long _y): x(_x), y(_y) {};  // for Clipper
-    Point(double x, double y);
+    coord_t z;
+    Point(coord_t _x = 0, coord_t _y = 0, coord_t _z = -1): x(_x), y(_y), z(_z) {};
+    Point(int _x, int _y, int _z): x(_x), y(_y), z(_z) {};
+    Point(long long _x, long long _y, long long _z): x(_x), y(_y), z(_z) {};  // for Clipper
+    Point(double x, double y, double z);
     static Point new_scale(coordf_t x, coordf_t y) {
         return Point(scale_(x), scale_(y));
+    };
+    static Point new_scale(coordf_t x, coordf_t y, coordf_t z) {
+        return Point(scale_(x), scale_(y), scale_(z));
     };
     bool operator==(const Point& rhs) const;
     std::string wkt() const;
     std::string dump_perl() const;
     void scale(double factor);
     void translate(double x, double y);
+    void translate(double x, double y, double z);
     void translate(const Vector &vector);
     void rotate(double angle);
     void rotate(double angle, const Point &center);
@@ -54,7 +62,7 @@ class Point
         p.rotate(angle, center);
         return p;
     }
-    bool coincides_with(const Point &point) const { return this->x == point.x && this->y == point.y; }
+    bool coincides_with(const Point &point) const { return this->x == point.x && this->y == point.y && this->z == point.z; }
     bool coincides_with_epsilon(const Point &point) const;
     int nearest_point_index(const Points &points) const;
     int nearest_point_index(const PointConstPtrs &points) const;
@@ -72,7 +80,7 @@ class Point
     Point projection_onto(const Line &line) const;
     Point negative() const;
     Vector vector_to(const Point &point) const;
-    void align_to_grid(const Point &spacing, const Point &base = Point(0,0));
+    void align_to_grid(const Point &spacing, const Point &base = Point(0,0,0));
 };
 
 Point operator+(const Point& point1, const Point& point2);
@@ -91,12 +99,23 @@ operator+=(Points &dst, const Point &p) {
     return dst;
 };
 
+//TODO remove point3 and Point3f
 class Point3 : public Point
 {
     public:
     coord_t z;
     explicit Point3(coord_t _x = 0, coord_t _y = 0, coord_t _z = 0): Point(_x, _y), z(_z) {};
     bool coincides_with(const Point3 &point3) const { return this->x == point3.x && this->y == point3.y && this->z == point3.z; }
+    static Point3 new_scale(coordf_t x, coordf_t y, coordf_t z) {
+        return Point3(scale_(x), scale_(y), scale_(z));
+    };
+    bool operator==(const Point3& rhs) const;
+    std::string wkt() const;
+    void scale(double factor);
+    void translate(double x, double y, double z);
+    void translate(const Vector3 &vector);
+    void rotate_z(double angle);
+    void rotate_z(double angle, const Point3 &center);
 };
 
 std::ostream& operator<<(std::ostream &stm, const Pointf &pointf);
@@ -134,9 +153,15 @@ class Pointf3 : public Pointf
     static Pointf3 new_unscale(coord_t x, coord_t y, coord_t z) {
         return Pointf3(unscale(x), unscale(y), unscale(z));
     };
+    static Pointf3 new_unscale(const Point3 &p) {
+        return Pointf3(unscale(p.x), unscale(p.y), unscale(p.z));
+    };
+    std::string wkt() const;
     void scale(double factor);
     void translate(const Vectorf3 &vector);
     void translate(double x, double y, double z);
+    void rotate_z(double angle);
+    void rotate_z(double angle, const Pointf3 &center);
     double distance_to(const Pointf3 &point) const;
     Pointf3 negative() const;
     Vectorf3 vector_to(const Pointf3 &point) const;

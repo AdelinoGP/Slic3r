@@ -208,7 +208,7 @@ convex_hull(Points points)
     assert(points.size() >= 3);
     // sort input points
     std::sort(points.begin(), points.end(), sort_points);
-    
+
     int n = points.size(), k = 0;
     Polygon hull;
     hull.points.resize(2*n);
@@ -226,10 +226,10 @@ convex_hull(Points points)
     }
 
     hull.points.resize(k);
-    
+
     assert( hull.points.front().coincides_with(hull.points.back()) );
     hull.points.pop_back();
-    
+
     return hull;
 }
 
@@ -255,7 +255,7 @@ chained_path(const Points &points, std::vector<Points::size_type> &retval, Point
         my_points.push_back(&*it);
         indices[&*it] = it - points.begin();
     }
-    
+
     retval.reserve(points.size());
     while (!my_points.empty()) {
         Points::size_type idx = start_near.nearest_point_index(my_points);
@@ -299,7 +299,7 @@ contains(const std::vector<T> &vector, const Point &point)
     for (const T &it : vector)
         if (it.contains(point))
             return true;
-    
+
     return false;
 }
 template bool contains(const Polygons &vector, const Point &point);
@@ -312,7 +312,7 @@ area(const std::vector<T> &vector)
     double area = 0;
     for (const T &it : vector)
         area += it.area();
-    
+
     return area;
 }
 template double area(const Polygons &vector);
@@ -343,6 +343,162 @@ linint(double value, double oldmin, double oldmax, double newmin, double newmax)
     return (value - oldmin) * (newmax - newmin) / (oldmax - oldmin) + newmin;
 }
 
+bool
+point_in_bounding_box(Pointf pt, Pointf v1, Pointf v2, Pointf v3, double epsilon)
+{
+    //check if point is in x range
+    if (pt.x < std::min({v1.x, v2.x, v3.x}) - epsilon || pt.x > std::max({v1.x, v2.x, v3.x}) + epsilon) {
+        return false;
+    }
+    //check if point is in y range
+    if (pt.y < std::min({v1.y, v2.y, v3.y}) - epsilon || pt.y > std::max({v1.y, v2.y, v3.y}) + epsilon) {
+        return false;
+    }
+    return true;
+}
+
+float
+sign(Pointf p1, Pointf p2, Pointf p3)
+{
+    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+}
+
+bool
+Point_in_triangle_side(Pointf pt, Pointf v1, Pointf v2, Pointf v3)
+{
+    //Check if point is right of every edge
+    if (sign(pt, v1, v2) <= 0.0f) return false;
+    if (sign(pt, v2, v3) <= 0.0f) return false;
+    if (sign(pt, v3, v1) <= 0.0f) return false;
+
+    return true;
+}
+
+// bool
+// Point_in_triangle_barycentric(Pointf pt, Pointf v1, Pointf v2, Pointf v3)
+// {
+//     double denom = ((v2.y - v3.y)*(v1.x - v3.x) + (v3.x - v2.x)*(v1.y - v3.y));
+//     double a = ((v2.y - v3.y)*(pt.x - v3.x) + (v3.x - v2.x)*(pt.y - v3.y)) / denom;
+//     double b = ((v3.y - v1.y)*(pt.x - v3.x) + (v1.x - v3.x)*(pt.y - v3.y)) / denom;
+//     double c = 1 - a - b;
+    
+//     return (0 <= a && a <= 1 && 0 <= b && b <= 1 && 0 <= c && c <= 1);
+// }
+
+double
+distanceSquarePointToSegment(Pointf pt, Pointf v1, Pointf v2)
+{
+    double p1_p2_squareLength = (v2.x - v1.x)*(v2.x - v1.x) + (v2.y - v1.y)*(v2.y - v1.y);
+    double dotProduct = ((pt.x - v1.x)*(v2.x - v1.x) + (pt.y - v1.y)*(v2.y - v1.y)) / p1_p2_squareLength;
+    if ( dotProduct < 0 )
+    {
+        return (pt.x - v1.x)*(pt.x - v1.x) + (pt.y - v1.y)*(pt.y - v1.y);
+    }
+    else if ( dotProduct <= 1 )
+    {
+        double p_p1_squareLength = (v1.x - pt.x)*(v1.x - pt.x) + (v1.y - pt.y)*(v1.y - pt.y);
+        return p_p1_squareLength - dotProduct * dotProduct * p1_p2_squareLength;
+    }
+    else
+    {
+        return (pt.x - v2.x)*(pt.x - v2.x) + (pt.y - v2.y)*(pt.y - v2.y);
+    }
+}
+
+bool
+Point_in_triangle(Pointf pt, Pointf v1, Pointf v2, Pointf v3, double epsilon)
+{
+    const double EPSILON_SQUARE = epsilon*epsilon;
+
+    //taken from http://totologic.blogspot.com/2014/01/accurate-point-in-triangle-test.html
+    //check if pt is in bounding box
+    if (!point_in_bounding_box(pt,v1,v2,v3,epsilon)){
+        return false;
+    }
+
+    //check if point is in triangle
+    if (Point_in_triangle_side(pt,v1,v2,v3)){
+        //if yes, we trust the test
+        return true;
+    } else {
+        //if no, we dont trust the test and check further
+        if (distanceSquarePointToSegment(pt,v1,v2) <= EPSILON_SQUARE){
+            return true;
+        }
+        if (distanceSquarePointToSegment(pt,v2,v3) <= EPSILON_SQUARE){
+            return true;
+        }
+        if (distanceSquarePointToSegment(pt,v3,v1) <= EPSILON_SQUARE){
+            return true;
+        }
+        //if everything fails, the point is not in the triangle
+        return false;
+    }
+}
+
+//https://graphics.stanford.edu/~mdfisher/Code/Engine/Plane.cpp.html
+void
+Project_point_on_plane(Pointf3 v1,  Pointf3 n, Point &pt)
+{
+    //if no intersection leave point unchanged (should never happen)
+    if(n.z == 0) {
+        return;
+    }
+    //unscale point for calculations
+    float px = unscale(pt.x);
+    float py = unscale(pt.y);
+    float pz = unscale(pt.z);
+
+    //Calculate space plane
+    float d = -(v1.x * n.x + v1.y * n.y + v1.z * n.z);
+
+    float u = -(n.x * px + n.y * py + n.z * pz + d) / n.z;
+    //scale up again
+    pt.z = scale_(pz + u);
+
+}
+
+// http://paulbourke.net/geometry/pointlineplane/index.html
+Point*
+Line_intersection(Point p1, Point p2, Point p3, Point p4) {
+
+    float denom = ((p4.y - p3.y)*(p2.x - p1.x)) -
+                  ((p4.x - p3.x)*(p2.y - p1.y));
+
+    float nume_a = ((p4.x - p3.x)*(p1.y - p3.y)) -
+                   ((p4.y - p3.y)*(p1.x - p3.x));
+
+    float nume_b = ((p2.x - p1.x)*(p1.y - p3.y)) -
+                   ((p2.y - p1.y)*(p1.x - p3.x));
+
+    if(denom == 0.0f)
+    {
+        return NULL;
+    }
+
+    float ua = nume_a / denom;
+    float ub = nume_b / denom;
+
+    if(ua >= 0.0f && ua <= 1.0f && ub >= 0.0f && ub <= 1.0f)
+    {
+        // Get the intersection point anc calculate z component
+        Point* ret = new Point();
+        ret->x = p1.x + ua*(p2.x - p1.x);
+        ret->y = p1.y + ua*(p2.y - p1.y);
+        ret->z = p1.z - ((sqrt((p1.x-ret->x)*(p1.x-ret->x) + (p1.y-ret->y)*(p1.y-ret->y))
+                  / sqrt((p1.x-p2.x)*(p1.x-p2.x) + (p1.y-p2.y)*(p1.y-p2.y)))
+                  * (p1.z - p2.z));
+        return ret;
+    }
+
+    return NULL;
+}
+
+float
+triangle_surface(Point p1, Point p2, Point p3) {
+    return 0.5 * ((p2.x-p1.x) * (p3.y-p1.y) - (p2.y-p1.y) * (p3.x-p1.x));
+}
+
 class ArrangeItem {
     public:
     Pointf pos;
@@ -366,7 +522,7 @@ arrange(size_t total_parts, const Pointf &part_size, coordf_t dist, const Boundi
     // use actual part size (the largest) plus separation distance (half on each side) in spacing algorithm
     part.x += dist;
     part.y += dist;
-    
+
     Pointf area;
     if (bb != NULL && bb->defined) {
         area = bb->size();
@@ -375,46 +531,46 @@ arrange(size_t total_parts, const Pointf &part_size, coordf_t dist, const Boundi
         area.x = part.x * total_parts;
         area.y = part.y * total_parts;
     }
-    
+
     // this is how many cells we have available into which to put parts
     size_t cellw = floor((area.x + dist) / part.x);
     size_t cellh = floor((area.y + dist) / part.y);
     if (total_parts > (cellw * cellh))
         return false;
-    
+
     // total space used by cells
     Pointf cells(cellw * part.x, cellh * part.y);
-    
+
     // bounding box of total space used by cells
     BoundingBoxf cells_bb;
     cells_bb.merge(Pointf(0,0)); // min
     cells_bb.merge(cells);  // max
-    
+
     // center bounding box to area
     cells_bb.translate(
         (area.x - cells.x) / 2,
         (area.y - cells.y) / 2
     );
-    
+
     // list of cells, sorted by distance from center
     std::vector<ArrangeItemIndex> cellsorder;
-    
+
     // work out distance for all cells, sort into list
     for (size_t i = 0; i <= cellw-1; ++i) {
         for (size_t j = 0; j <= cellh-1; ++j) {
             coordf_t cx = linint(i + 0.5, 0, cellw, cells_bb.min.x, cells_bb.max.x);
             coordf_t cy = linint(j + 0.5, 0, cellh, cells_bb.min.y, cells_bb.max.y);
-            
+
             coordf_t xd = fabs((area.x / 2) - cx);
             coordf_t yd = fabs((area.y / 2) - cy);
-            
+
             ArrangeItem c;
             c.pos.x = cx;
             c.pos.y = cy;
             c.index_x = i;
             c.index_y = j;
             c.dist = xd * xd + yd * yd - fabs((cellw / 2) - (i + 0.5));
-            
+
             // binary insertion sort
             {
                 coordf_t index = c.dist;
@@ -423,7 +579,7 @@ arrange(size_t total_parts, const Pointf &part_size, coordf_t dist, const Boundi
                 while (low < high) {
                     size_t mid = (low + ((high - low) / 2)) | 0;
                     coordf_t midval = cellsorder[mid].index;
-                    
+
                     if (midval < index) {
                         low = mid + 1;
                     } else if (midval > index) {
@@ -438,7 +594,7 @@ arrange(size_t total_parts, const Pointf &part_size, coordf_t dist, const Boundi
             ENDSORT: ;
         }
     }
-    
+
     // the extents of cells actually used by objects
     coordf_t lx = 0;
     coordf_t ty = 0;
@@ -466,17 +622,17 @@ arrange(size_t total_parts, const Pointf &part_size, coordf_t dist, const Boundi
         cellsorder.erase(cellsorder.begin());
         coordf_t cx = c.item.index_x - lx;
         coordf_t cy = c.item.index_y - ty;
-        
+
         positions.push_back(Pointf(cx * part.x, cy * part.y));
     }
-    
+
     if (bb != NULL && bb->defined) {
         for (Pointfs::iterator p = positions.begin(); p != positions.end(); ++p) {
             p->x += bb->min.x;
             p->y += bb->min.y;
         }
     }
-    
+
     return true;
 }
 
@@ -484,7 +640,7 @@ void
 MedialAxis::build(ThickPolylines* polylines)
 {
     construct_voronoi(this->lines.begin(), this->lines.end(), &this->vd);
-    
+
     /*
     // DEBUG: dump all Voronoi edges
     {
@@ -492,21 +648,21 @@ MedialAxis::build(ThickPolylines* polylines)
         svg.draw(*this->expolygon);
         for (VD::const_edge_iterator edge = this->vd.edges().begin(); edge != this->vd.edges().end(); ++edge) {
             if (edge->is_infinite()) continue;
-            
+
             ThickPolyline polyline;
             polyline.points.push_back(Point( edge->vertex0()->x(), edge->vertex0()->y() ));
             polyline.points.push_back(Point( edge->vertex1()->x(), edge->vertex1()->y() ));
             polyline.width.push_back(this->max_width);
             polyline.width.push_back(this->max_width);
             polylines->push_back(polyline);
-            
+
             svg.draw(polyline);
         }
         svg.Close();
         return;
     }
     */
-    
+
     // collect valid edges (i.e. prune those not belonging to MAT)
     // note: this keeps twins, so it inserts twice the number of the valid edges
     this->valid_edges.clear();
@@ -516,37 +672,37 @@ MedialAxis::build(ThickPolylines* polylines)
             // if we only process segments representing closed loops, none if the
             // infinite edges (if any) would be part of our MAT anyway
             if (edge->is_secondary() || edge->is_infinite()) continue;
-        
+
             // don't re-validate twins
             if (seen_edges.find(&*edge) != seen_edges.end()) continue;  // TODO: is this needed?
             seen_edges.insert(&*edge);
             seen_edges.insert(edge->twin());
-            
+
             if (!this->validate_edge(&*edge)) continue;
             this->valid_edges.insert(&*edge);
             this->valid_edges.insert(edge->twin());
         }
     }
     this->edges = this->valid_edges;
-    
+
     // iterate through the valid edges to build polylines
     while (!this->edges.empty()) {
         const VD::edge_type* edge = *this->edges.begin();
-        
+
         // start a polyline
         ThickPolyline polyline;
         polyline.points.push_back(Point( edge->vertex0()->x(), edge->vertex0()->y() ));
         polyline.points.push_back(Point( edge->vertex1()->x(), edge->vertex1()->y() ));
         polyline.width.push_back(this->thickness[edge].first);
         polyline.width.push_back(this->thickness[edge].second);
-        
+
         // remove this edge and its twin from the available edges
         (void)this->edges.erase(edge);
         (void)this->edges.erase(edge->twin());
-        
+
         // get next points
         this->process_edge_neighbors(edge, &polyline);
-        
+
         // get previous points
         {
             ThickPolyline rpolyline;
@@ -555,15 +711,15 @@ MedialAxis::build(ThickPolylines* polylines)
             polyline.width.insert(polyline.width.begin(), rpolyline.width.rbegin(), rpolyline.width.rend());
             polyline.endpoints.first = rpolyline.endpoints.second;
         }
-        
+
         assert(polyline.width.size() == polyline.points.size()*2 - 2);
-        
+
         // prevent loop endpoints from being extended
         if (polyline.first_point().coincides_with(polyline.last_point())) {
             polyline.endpoints.first = false;
             polyline.endpoints.second = false;
         }
-        
+
         // append polyline to result
         polylines->push_back(polyline);
     }
@@ -585,21 +741,21 @@ MedialAxis::process_edge_neighbors(const VD::edge_type* edge, ThickPolyline* pol
         // to find neighbors on the ending point, we just swap edge with
         // its twin.
         const VD::edge_type* twin = edge->twin();
-    
+
         // count neighbors for this edge
         std::vector<const VD::edge_type*> neighbors;
         for (const VD::edge_type* neighbor = twin->rot_next(); neighbor != twin;
             neighbor = neighbor->rot_next()) {
             if (this->valid_edges.count(neighbor) > 0) neighbors.push_back(neighbor);
         }
-    
+
         // if we have a single neighbor then we can continue recursively
         if (neighbors.size() == 1) {
             const VD::edge_type* neighbor = neighbors.front();
-            
+
             // break if this is a closed loop
             if (this->edges.count(neighbor) == 0) return;
-            
+
             Point new_point(neighbor->vertex1()->x(), neighbor->vertex1()->y());
             polyline->points.push_back(new_point);
             polyline->width.push_back(this->thickness[neighbor].first);
@@ -626,13 +782,13 @@ MedialAxis::validate_edge(const VD::edge_type* edge)
      || std::abs(edge->vertex1()->x()) > (double)MAX_COORD
      || std::abs(edge->vertex1()->y()) > (double)MAX_COORD)
         return false;
-    
+
     // construct the line representing this edge of the Voronoi diagram
     const Line line(
         Point( edge->vertex0()->x(), edge->vertex0()->y() ),
         Point( edge->vertex1()->x(), edge->vertex1()->y() )
     );
-    
+
     // discard edge if it lies outside the supplied shape
     // this could maybe be optimized (checking inclusion of the endpoints
     // might give false positives as they might belong to the contour itself)
@@ -644,13 +800,13 @@ MedialAxis::validate_edge(const VD::edge_type* edge)
             if (!this->expolygon->contains(line)) return false;
         }
     }
-    
+
     // retrieve the original line segments which generated the edge we're checking
     const VD::cell_type* cell_l = edge->cell();
     const VD::cell_type* cell_r = edge->twin()->cell();
     const Line &segment_l = this->retrieve_segment(cell_l);
     const Line &segment_r = this->retrieve_segment(cell_r);
-    
+
     /*
     SVG svg("edge.svg");
     svg.draw(*this->expolygon);
@@ -659,36 +815,36 @@ MedialAxis::validate_edge(const VD::edge_type* edge)
     svg.draw(segment_r, "blue");
     svg.Close();
     */
-    
+
     /*  Calculate thickness of the cross-section at both the endpoints of this edge.
-        Our Voronoi edge is part of a CCW sequence going around its Voronoi cell 
+        Our Voronoi edge is part of a CCW sequence going around its Voronoi cell
         located on the left side. (segment_l).
-        This edge's twin goes around segment_r. Thus, segment_r is 
+        This edge's twin goes around segment_r. Thus, segment_r is
         oriented in the same direction as our main edge, and segment_l is oriented
         in the same direction as our twin edge.
         We used to only consider the (half-)distances to segment_r, and that works
-        whenever segment_l and segment_r are almost specular and facing. However, 
+        whenever segment_l and segment_r are almost specular and facing. However,
         at curves they are staggered and they only face for a very little length
         (our very short edge represents such visibility).
         Both w0 and w1 can be calculated either towards cell_l or cell_r with equal
         results by Voronoi definition.
         When cell_l or cell_r don't refer to the segment but only to an endpoint, we
         calculate the distance to that endpoint instead.  */
-    
+
     coordf_t w0 = cell_r->contains_segment()
         ? line.a.distance_to(segment_r)*2
         : line.a.distance_to(this->retrieve_endpoint(cell_r))*2;
-    
+
     coordf_t w1 = cell_l->contains_segment()
         ? line.b.distance_to(segment_l)*2
         : line.b.distance_to(this->retrieve_endpoint(cell_l))*2;
-    
+
     if (cell_l->contains_segment() && cell_r->contains_segment()) {
         // calculate the relative angle between the two boundary segments
         double angle = fabs(segment_r.orientation() - segment_l.orientation());
         if (angle > PI) angle = 2*PI - angle;
         assert(angle >= 0 && angle <= PI);
-        
+
         // fabs(angle) ranges from 0 (collinear, same direction) to PI (collinear, opposite direction)
         // we're interested only in segments close to the second case (facing segments)
         // so we allow some tolerance.
@@ -697,8 +853,8 @@ MedialAxis::validate_edge(const VD::edge_type* edge)
         // and the endpoint of another segment), since their orientation would not be meaningful
         if (PI - angle > PI/8) {
             // angle is not narrow enough
-            
-            // only apply this filter to segments that are not too short otherwise their 
+
+            // only apply this filter to segments that are not too short otherwise their
             // angle could possibly be not meaningful
             if (w0 < SCALED_EPSILON || w1 < SCALED_EPSILON || line.length() >= this->min_width)
                 return false;
@@ -707,16 +863,16 @@ MedialAxis::validate_edge(const VD::edge_type* edge)
         if (w0 < SCALED_EPSILON || w1 < SCALED_EPSILON)
             return false;
     }
-    
+
     if (w0 < this->min_width && w1 < this->min_width)
         return false;
-    
+
     if (w0 > this->max_width && w1 > this->max_width)
         return false;
-    
+
     this->thickness[edge]         = std::make_pair(w0, w1);
     this->thickness[edge->twin()] = std::make_pair(w1, w0);
-    
+
     return true;
 }
 

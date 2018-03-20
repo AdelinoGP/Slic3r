@@ -7,12 +7,24 @@
 #include <string>
 #include <vector>
 #include <boost/asio.hpp>
+
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 107300
+#include <boost/bind/bind.hpp>
+#else
 #include <boost/bind.hpp>
+#endif
 #include <boost/thread.hpp>
+#include <boost/core/noncopyable.hpp>
 
 namespace Slic3r {
 
 namespace asio = boost::asio;
+
+#if BOOST_VERSION >= 107300
+using boost::placeholders::_1;
+using boost::placeholders::_2;
+#endif
 
 class GCodeSender : private boost::noncopyable {
     public:
@@ -34,7 +46,7 @@ class GCodeSender : private boost::noncopyable {
     std::string getB() const;
     void set_DTR(bool on);
     void reset();
-    
+
     private:
     asio::io_service io;
     asio::serial_port serial;
@@ -44,7 +56,7 @@ class GCodeSender : private boost::noncopyable {
     bool connected; // whether the printer is online
     bool error;
     mutable boost::mutex error_mutex;
-    
+
     // this mutex guards queue, priqueue, can_send, queue_paused, sent, last_sent
     mutable boost::mutex queue_mutex;
     std::queue<std::string> queue;
@@ -53,12 +65,12 @@ class GCodeSender : private boost::noncopyable {
     bool queue_paused;
     size_t sent;
     std::vector<std::string> last_sent;
-    
+
     // this mutex guards log, T, B
     mutable boost::mutex log_mutex;
     std::queue<std::string> log;
     std::string T, B;
-    
+
     void set_baud_rate(unsigned int baud_rate);
     void set_error_status(bool e);
     void do_send();

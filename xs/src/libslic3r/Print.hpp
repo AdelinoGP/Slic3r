@@ -15,6 +15,8 @@
 #include "PlaceholderParser.hpp"
 #include "SlicingAdaptive.hpp"
 #include "LayerHeightSpline.hpp"
+#include "NonplanarSurface.hpp"
+#include "NonplanarFacet.hpp"
 
 namespace Slic3r {
 
@@ -29,6 +31,7 @@ enum PrintStep {
 enum PrintObjectStep {
     posLayers, posSlice, posPerimeters, posDetectSurfaces,
     posPrepareInfill, posInfill, posSupportMaterial,
+    posNonplanarProjection,
 };
 
 // To be instantiated over PrintStep or PrintObjectStep enums.
@@ -37,7 +40,7 @@ class PrintState
 {
     public:
     std::set<StepType> started, done;
-    
+
     bool is_started(StepType step) const;
     bool is_done(StepType step) const;
     void set_started(StepType step);
@@ -60,7 +63,7 @@ class PrintRegion
 
     private:
     Print* _print;
-    
+
     PrintRegion(Print* print);
     ~PrintRegion();
 };
@@ -81,11 +84,13 @@ class PrintObject
     std::map< size_t,std::vector<int> > region_volumes;
     PrintObjectConfig config; //< Configuration
     t_layer_height_ranges layer_height_ranges;
-    
+
     LayerHeightSpline layer_height_spline;
 
-    /// this is set to true when LayerRegion->slices is split in top/internal/bottom
-    /// so that next call to make_perimeters() performs a union() before computing loops
+    NonplanarSurfaces nonplanar_surfaces;
+
+    // this is set to true when LayerRegion->slices is split in top/internal/bottom
+    // so that next call to make_perimeters() performs a union() before computing loops
     bool typed_slices;
 
     Point3 size;           //< XYZ in scaled coordinates
@@ -102,10 +107,10 @@ class PrintObject
     SupportLayerPtrs support_layers;
     // TODO: Fill* fill_maker        => (is => 'lazy');
     PrintState<PrintObjectStep> state;
-    
+
     Print* print();
     ModelObject* model_object() { return this->_model_object; };
-    
+
     Points copies() const;
     bool add_copy(const Pointf &point);
     bool delete_last_copy();
@@ -115,7 +120,7 @@ class PrintObject
     BoundingBox bounding_box() const;
     std::set<size_t> extruders() const;
     std::set<size_t> support_material_extruders() const;
-    
+
     // adds region_id, too, if necessary
     void add_region_volume(int region_id, int volume_id);
 
@@ -134,23 +139,28 @@ class PrintObject
     const SupportLayer* get_support_layer(int idx) const { return this->support_layers.at(idx); };
     SupportLayer* add_support_layer(int id, coordf_t height, coordf_t print_z);
     void delete_support_layer(int idx);
-    
+
     // methods for handling state
     bool invalidate_state_by_config(const PrintConfigBase &config);
     bool invalidate_step(PrintObjectStep step);
     bool invalidate_all_steps();
-    
+
     bool has_support_material() const;
     void detect_surfaces_type();
+    void debug_svg_print();
+    bool check_nonplanar_collisions(NonplanarSurface &surface, int id);
+    void move_nonplanar_surfaces_up();
+    void project_nonplanar_surfaces();
     void process_external_surfaces();
     void bridge_over_infill();
     coordf_t adjust_layer_height(coordf_t layer_height) const;
     std::vector<coordf_t> generate_object_layers(coordf_t first_layer_height);
     void _slice();
+    void find_nonplanar_surfaces();
     std::vector<ExPolygons> _slice_region(size_t region_id, std::vector<float> z, bool modifier);
     void _make_perimeters();
     void _infill();
-    
+
     private:
     Print* _print;
     ModelObject* _model_object;
@@ -185,7 +195,7 @@ class Print
 
     Print();
     ~Print();
-    
+
     // methods for handling objects
     void clear_objects();
     PrintObject* get_object(size_t idx) { return this->objects.at(idx); };
@@ -198,13 +208,13 @@ class Print
     PrintRegion* get_region(size_t idx) { return this->regions.at(idx); };
     const PrintRegion* get_region(size_t idx) const { return this->regions.at(idx); };
     PrintRegion* add_region();
-    
+
     // methods for handling state
     bool invalidate_state_by_config(const PrintConfigBase &config);
     bool invalidate_step(PrintStep step);
     bool invalidate_all_steps();
     bool step_done(PrintObjectStep step) const;
-    
+
     void add_model_object(ModelObject* model_object, int idx = -1);
     bool apply_config(DynamicPrintConfig config);
     bool has_infinite_skirt() const;
@@ -217,7 +227,7 @@ class Print
     Flow brim_flow() const;
     Flow skirt_flow() const;
     void _make_brim();
-    
+
     std::set<size_t> object_extruders() const;
     std::set<size_t> support_material_extruders() const;
     std::set<size_t> extruders() const;
@@ -228,7 +238,7 @@ class Print
     void auto_assign_extruders(ModelObject* model_object) const;
     std::string output_filename();
     std::string output_filepath(const std::string &path);
-    
+
     private:
     void clear_regions();
     void delete_region(size_t idx);

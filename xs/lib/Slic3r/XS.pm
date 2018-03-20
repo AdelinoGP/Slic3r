@@ -178,6 +178,7 @@ sub new {
         $args{thickness_layers}  // 1,
         $args{bridge_angle}      // -1,
         $args{extra_perimeters}  // 0,
+        $args{distance_to_top} // 0,
     );
 }
 
@@ -191,6 +192,7 @@ sub clone {
         delete $args{thickness_layers}  // $self->thickness_layers,
         delete $args{bridge_angle}      // $self->bridge_angle,
         delete $args{extra_perimeters}  // $self->extra_perimeters,
+        delete $args{distance_to_top} // $self->distance_to_top,
     );
 }
 
@@ -248,6 +250,8 @@ for my $class (qw(
         Slic3r::Model::Material
         Slic3r::Model::Object
         Slic3r::Model::Volume
+        Slic3r::NonplanarFacet
+        Slic3r::NonplanarSurface
         Slic3r::Point
         Slic3r::Point3
         Slic3r::Pointf

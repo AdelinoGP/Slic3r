@@ -593,11 +593,11 @@ GCode::_extrude(ExtrusionPath path, std::string description, double speed)
         Lines lines = path.polyline.lines();
         for (Lines::const_iterator line = lines.begin(); line != lines.end(); ++line) {
             const double line_length = line->length() * SCALING_FACTOR;
+            const double multiplicator = std::cos(line->angle());
             path_length += line_length;
-            
-            gcode += this->writer.extrude_to_xy(
-                this->point_to_gcode(line->b),
-                e_per_mm * line_length,
+            gcode += this->writer.extrude_to_xyz(
+                this->point3_to_gcode(line->b),
+                e_per_mm * line_length * multiplicator,
                 comment
             );
         }
@@ -635,6 +635,9 @@ GCode::travel_to(const Point &point, ExtrusionRole role, std::string comment)
     // check whether a straight travel move would need retraction
     bool needs_retraction = this->needs_retraction(travel, role);
     
+    //Check if source or target points lay below the current Layer
+    bool needs_zmove = this->needs_zmove(travel);
+
     // if a retraction would be needed, try to use avoid_crossing_perimeters to plan a
     // multi-hop travel path inside the configuration space
     if (needs_retraction
@@ -655,10 +658,19 @@ GCode::travel_to(const Point &point, ExtrusionRole role, std::string comment)
     std::string gcode;
     if (needs_retraction) gcode += this->retract();
     
+    // Move Z up if necessary
+    if (needs_zmove) {
+        gcode += this->writer.travel_to_z(this->layer->print_z, "Move up before moving");
+    }
+    
     // use G1 because we rely on paths being straight (G0 may make round paths)
     Lines lines = travel.lines();
     for (Lines::const_iterator line = lines.begin(); line != lines.end(); ++line)
-        gcode += this->writer.travel_to_xy(this->point_to_gcode(line->b), comment);
+        if (needs_zmove){
+            gcode += this->writer.travel_to_xy(this->point_to_gcode(line->b), comment);
+        } else {
+            gcode += this->writer.travel_to_xyz(this->point3_to_gcode(line->b), comment);
+        }
     
     /*  While this makes the estimate more accurate, CoolingBuffer calculates the slowdown
         factor on the whole elapsed time but only alters non-travel moves, thus the resulting
@@ -667,6 +679,15 @@ GCode::travel_to(const Point &point, ExtrusionRole role, std::string comment)
     if (this->config.cooling)
         this->elapsed_time += unscale(travel.length()) / this->config.get_abs_value("travel_speed");
     */
+    
+    // Move Z down if necessary
+    if (needs_zmove) {
+        float move_z = unscale(point.z);
+        if(point.z == -1.0f) {
+            move_z = this->layer->print_z;
+        }
+        gcode += this->writer.travel_to_z(move_z, "Move down after moving");
+    }
     
     return gcode;
 }
@@ -698,6 +719,24 @@ GCode::needs_retraction(const Polyline &travel, ExtrusionRole role)
     
     // retract if only_retract_when_crossing_perimeters is disabled or doesn't apply
     return true;
+}
+
+bool
+GCode::needs_zmove(const Polyline &travel)
+{
+    if (travel.length() < scale_(1.0)) {
+        // skip zmove if the move is shorter 1 mm
+        return false;
+    }
+    
+    //check if any point in travel is below the layer z
+    for (Point p : travel.points)
+    {
+        if ((p.z != -1.0) && (p.z < scale_(this->layer->print_z)))
+            return true;
+    }
+    
+    return false;
 }
 
 std::string
@@ -784,6 +823,19 @@ GCode::point_to_gcode(const Point &point)
         unscale(point.x) + this->origin.x - extruder_offset.x,
         unscale(point.y) + this->origin.y - extruder_offset.y
     );
+}
+
+// convert a model-space scaled point into G-code coordinates
+Pointf3
+GCode::point3_to_gcode(const Point &point)
+{
+    Pointf extruder_offset = EXTRUDER_CONFIG(extruder_offset);
+    return Pointf3(
+        unscale(point.x) + this->origin.x - extruder_offset.x,
+        unscale(point.y) + this->origin.y - extruder_offset.y,
+        (point.z == -1.0f ? this->layer->print_z : unscale(point.z)) //TODO Origin?
+    );
+    
 }
 
 }

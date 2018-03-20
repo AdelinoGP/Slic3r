@@ -2,10 +2,20 @@
 #include "BoundingBox.hpp"
 #include "ClipperUtils.hpp"
 #include "Geometry.hpp"
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 107300
+#include <boost/bind/bind.hpp>
+#endif
 #include <algorithm>
 #include <vector>
+#include <limits>
+#include "SVG.hpp"
 
 namespace Slic3r {
+
+#if BOOST_VERSION >= 107300
+using boost::placeholders::_1;
+#endif
 
 PrintObject::PrintObject(Print* print, ModelObject* model_object, const BoundingBoxf3 &modobj_bbox)
 :   layer_height_spline(model_object->layer_height_spline),
@@ -28,7 +38,7 @@ PrintObject::PrintObject(Print* print, ModelObject* model_object, const Bounding
         Pointf3 size = modobj_bbox.size();
         this->size = Point3(scale_(size.x), scale_(size.y), scale_(size.z));
     }
-    
+
     this->reload_model_instances();
     this->layer_height_ranges = model_object->layer_height_ranges;
 }
@@ -76,21 +86,21 @@ bool
 PrintObject::set_copies(const Points &points)
 {
     this->_copies = points;
-    
+
     // order copies with a nearest neighbor search and translate them by _copies_shift
     this->_shifted_copies.clear();
     this->_shifted_copies.reserve(points.size());
-    
+
     // order copies with a nearest-neighbor search
     std::vector<Points::size_type> ordered_copies;
     Slic3r::Geometry::chained_path(points, ordered_copies);
-    
+
     for (std::vector<Points::size_type>::const_iterator it = ordered_copies.begin(); it != ordered_copies.end(); ++it) {
         Point copy = points[*it];
         copy.translate(this->_copies_shift);
         this->_shifted_copies.push_back(copy);
     }
-    
+
     bool invalidated = false;
     if (this->_print->invalidate_step(psSkirt)) invalidated = true;
     if (this->_print->invalidate_step(psBrim)) invalidated = true;
@@ -216,10 +226,10 @@ bool
 PrintObject::invalidate_state_by_config(const PrintConfigBase &config)
 {
     const t_config_option_keys diff = this->config.diff(config);
-    
+
     std::set<PrintObjectStep> steps;
     bool all = false;
-    
+
     // this method only accepts PrintObjectConfig and PrintRegionConfig option keys
     for (const t_config_option_key &opt_key : diff) {
         if (opt_key == "layer_height"
@@ -265,10 +275,10 @@ PrintObject::invalidate_state_by_config(const PrintConfigBase &config)
             break;
         }
     }
-    
+
     if (!diff.empty())
         this->config.apply(config, true);
-    
+
     bool invalidated = false;
     if (all) {
         invalidated = this->invalidate_all_steps();
@@ -277,7 +287,7 @@ PrintObject::invalidate_state_by_config(const PrintConfigBase &config)
             if (this->invalidate_step(step))
                 invalidated = true;
     }
-    
+
     return invalidated;
 }
 
@@ -285,7 +295,7 @@ bool
 PrintObject::invalidate_step(PrintObjectStep step)
 {
     bool invalidated = this->state.invalidate(step);
-    
+
     // propagate to dependent steps
     if (step == posPerimeters) {
         invalidated |= this->invalidate_step(posPrepareInfill);
@@ -308,7 +318,7 @@ PrintObject::invalidate_step(PrintObjectStep step)
         invalidated |= this->_print->invalidate_step(psSkirt);
         invalidated |= this->_print->invalidate_step(psBrim);
     }
-    
+
     return invalidated;
 }
 
@@ -317,7 +327,7 @@ PrintObject::invalidate_all_steps()
 {
     // make a copy because when invalidating steps the iterators are not working anymore
     std::set<PrintObjectStep> steps = this->state.started;
-    
+
     bool invalidated = false;
     for (std::set<PrintObjectStep>::const_iterator step = steps.begin(); step != steps.end(); ++step) {
         if (this->invalidate_step(*step)) invalidated = true;
@@ -338,18 +348,284 @@ PrintObject::detect_surfaces_type()
 {
     // prerequisites
     // this->slice();
-    
+
     if (this->state.is_done(posDetectSurfaces)) return;
     this->state.set_started(posDetectSurfaces);
-    
+
     parallelize<Layer*>(
         std::queue<Layer*>(std::deque<Layer*>(this->layers.begin(), this->layers.end())),  // cast LayerPtrs to std::queue<Layer*>
         boost::bind(&Slic3r::Layer::detect_surfaces_type, _1),
         this->_print->config.threads.value
     );
-    
+
     this->typed_slices = true;
     this->state.set_done(posDetectSurfaces);
+}
+
+void
+PrintObject::debug_svg_print()
+{
+    FOREACH_REGION(this->_print, region) {
+        FOREACH_LAYER(this, layer_it) {
+            Layer* layer        = *layer_it;
+            LayerRegion* layerm = layer->get_region(region - this->_print->regions.begin());
+            SVG svg("svg/slice" + std::to_string(layer->id()) + ".svg");
+            for (Surfaces::iterator surface = layerm->slices.surfaces.begin(); surface != layerm->slices.surfaces.end(); ++surface) {
+                std::string color = "grey";
+                if (surface->surface_type == stTopNonplanar) color = "red";
+                if (surface->surface_type == stInternalSolidNonplanar) color = "orange";
+                if (surface->surface_type == stTop) color = "blue";
+                if (surface->surface_type == stInternalSolid) color = "lightblue";
+                if (surface->surface_type == stBottom) color = "green";
+                if (surface->surface_type == stBottomBridge) color = "lightgreen";
+                if (surface->surface_type == stInternalBridge) color = "yellow";
+                if (surface->surface_type == stInternal) color = "brown";
+                if (surface->surface_type == stInternalVoid) color = "purple";
+                svg.draw(surface->expolygon, color, 1.0f);
+                svg.draw_outline(surface->expolygon);
+            }
+            svg.arrows = false;
+            svg.Close();
+
+            SVG svg1("svg/fill" + std::to_string(layer->id()) + ".svg");
+            for (Surfaces::iterator surface = layerm->fill_surfaces.surfaces.begin(); surface != layerm->fill_surfaces.surfaces.end(); ++surface) {
+                std::string color = "grey";
+                if (surface->surface_type == stTopNonplanar) color = "red";
+                if (surface->surface_type == stInternalSolidNonplanar) color = "orange";
+                if (surface->surface_type == stTop) color = "blue";
+                if (surface->surface_type == stInternalSolid) color = "lightblue";
+                if (surface->surface_type == stBottom) color = "green";
+                if (surface->surface_type == stBottomBridge) color = "lightgreen";
+                if (surface->surface_type == stInternalBridge) color = "yellow";
+                if (surface->surface_type == stInternal) color = "brown";
+                if (surface->surface_type == stInternalVoid) color = "purple";
+                svg1.draw(surface->expolygon, color, 1.0f);
+                svg1.draw_outline(surface->expolygon);
+            }
+            svg1.arrows = false;
+            svg1.Close();
+        }
+
+    }
+}
+
+bool
+PrintObject::check_nonplanar_collisions(NonplanarSurface &surface, int id)
+{
+    FOREACH_REGION(this->_print, region_it) {
+        size_t region_id = region_it - this->_print->regions.begin();
+        ExPolygons nonplanar_polygon = surface.horizontal_projection();
+        ExPolygons shrinking_nonplanar_polygon = nonplanar_polygon;
+        std::map<coordf_t,ExPolygons> layer_nonplanar_polygon;
+        float angle_rad = this->config.nonplanar_layers_collision_angle.value * 3.14159265/180.0;
+        double collision_area = 0;
+
+        //Generate shrinking collision polygons for each layer in nonplanar extrusion
+        for (LayerPtrs::reverse_iterator layer_it = this->layers.rbegin(); layer_it != this->layers.rend(); ++layer_it) {
+            Layer* layer        = *layer_it;
+
+            //skip if above nonplanar surface
+            if (surface.stats.max.z < layer->slice_z) continue;
+            //break if below minimum nonplanar surface
+            if (surface.stats.min.z-layer->height > layer->slice_z) break;
+
+            LayerRegion &layerm = *layer->regions[region_id];
+            ExPolygons layerm_slices_surfaces = layerm.slices;
+            ExPolygons current_top;
+
+            if (layer->upper_layer != NULL) {
+                Layer* upper_layer = layer->upper_layer;
+                LayerRegion &upper_layerm = *upper_layer->regions[region_id];
+                ExPolygons upper_slices = upper_layerm.slices;
+                //set intersection as current top
+                current_top = diff_ex(layerm_slices_surfaces, upper_slices, false);
+            } else {
+                // whole surface is current top
+                current_top = layerm_slices_surfaces;
+            }
+
+            //save intersection with shrinking_nonplanar_polygon for each layer
+            layer_nonplanar_polygon[layer->slice_z] = intersection_ex(shrinking_nonplanar_polygon, current_top, true);
+
+            //remove small artifacts from Polygons
+            for (ExPolygons::iterator it=layer_nonplanar_polygon[layer->slice_z].begin(); it!=layer_nonplanar_polygon[layer->slice_z].end();) {
+                if(unscale(unscale(it->area())) <= 0.5)
+                    it = layer_nonplanar_polygon[layer->slice_z].erase(it);
+                else
+                    ++it;
+            }
+
+            //remove current top from shrinking_nonplanar_polygon
+            shrinking_nonplanar_polygon = diff_ex(shrinking_nonplanar_polygon, layer_nonplanar_polygon[layer->slice_z], true);
+
+            //debug
+            // SVG svg("svg/polygon_" + std::to_string(id) + "_" + std::to_string(layer->id()) + "_" + std::to_string(layer->slice_z) + ".svg");
+            // svg.draw_outline(layer_nonplanar_polygon[layer->slice_z],"green");
+            // svg.draw_outline(shrinking_nonplanar_polygon, "cyan");
+            // svg.arrows = false;
+            // svg.Close();
+        }
+
+        //check each layer
+        size_t minLayer = 0;
+        for (size_t i = 0; i < layers.size(); i++) {
+            //skip if below minimum nonplanar surface
+            if (surface.stats.min.z-layers[i]->height > layers[i]->slice_z) continue;
+            //break if above nonplanar surface
+            if (surface.stats.max.z < layers[i]->slice_z) break;
+            if (minLayer == 0) minLayer = i;
+
+            // SVG svg("svg/collider_" + std::to_string(id) + "_" + std::to_string(i) + "_" + std::to_string(layers[i]->slice_z) + ".svg");
+            // svg.draw(Polygons(layers[i]->regions[region_id]->slices), "blue");
+
+            //check for collisions on previous layers
+            for (size_t j = minLayer; j < i; j++) {
+                float layerdiff = layers[i]->slice_z - layers[j]->slice_z;
+                float angle_offset = scale_(layerdiff*std::sin(1.57079633-angle_rad)/std::sin(angle_rad));
+                ExPolygons offsetted = offset_ex(layer_nonplanar_polygon[layers[j]->slice_z],
+                        angle_offset,
+                        100000.0,
+                        ClipperLib::jtSquare);
+                
+                ExPolygons collisions = intersection_ex(layers[i]->regions[region_id]->slices, diff_ex(offsetted,nonplanar_polygon));
+                
+                //add up the colliding areas
+                if (!collisions.empty()){
+                    for (auto& c : collisions){
+                        collision_area += c.area();
+                    }
+                }
+                // svg.draw(diff_ex(offsetted,nonplanar_polygon), "yellow", 0.7f);
+                // svg.draw(collisions, "red", 0.9f);
+                // svg.draw_outline(layer_nonplanar_polygon[layers[j]->slice_z],"green");
+            }
+            //collsion found abort when area > configured area
+            if (this->config.nonplanar_layers_ignore_collision_size.value < unscale(unscale(collision_area))) {
+                std::cout << "Surface removed: collision on layer " << layers[i]->print_z << "mm (" << unscale(unscale(collision_area)) << " mm²)" << '\n';
+                return true;
+            }
+            // svg.arrows = false;
+            // svg.Close();
+        }
+    }
+
+    return false;
+}
+
+void
+PrintObject::move_nonplanar_surfaces_up()
+{
+    //skip if not active
+    if(!this->config.nonplanar_layers.value) return;
+
+    FOREACH_REGION(this->_print, region_it) {
+        size_t region_id = region_it - this->_print->regions.begin();
+        const PrintRegion &region = **region_it;
+        //assign all nonplanar surfaces to the corresponding layers
+        for (auto& nonplanar_surface: this->nonplanar_surfaces) {
+            //search home layer where the area is projected to (from top to bottom)
+            for (size_t i = this->layers.size()-1; i > 0; i--){
+                //when found, itterate down for number of top nonplanar layers
+                if (layers[i]->slice_z < nonplanar_surface.stats.max.z) {
+                    for (size_t j = i; (j > 0 && (i-j) < region.config.top_solid_layers ); j--){
+                        layers[j]->regions[region_id]->append_nonplanar_surface(nonplanar_surface, (i-j)*layers[i]->height);
+                    }
+                    break;
+                }
+            }
+        }
+        
+        //move nonplanar surfaces up
+        for (size_t i = layers.size()-1; i > 0 ; i--) {
+            LayerRegion &home_layerm = *layers[i]->regions[region_id];
+
+            //if there is no nonplanar surface in this layer continue to next one
+            if (home_layerm.nonplanar_surfaces.empty()) continue;
+            
+            //merge all polygons of the layer and determine their Z boundaries
+            float minZ = 9999999999.0f;
+            ExPolygons nonplanar_projection;
+            for (size_t k = 0; k < home_layerm.nonplanar_surfaces.size(); k++){
+                for (auto& expolygon: home_layerm.nonplanar_surfaces[k].horizontal_projection()) {
+                    nonplanar_projection.push_back(expolygon);
+                }
+                minZ = std::min(minZ, home_layerm.nonplanar_surfaces[k].stats.min.z-home_layerm.distances_to_top[k]);
+            }
+            //remove the current toplayer from projection
+            nonplanar_projection = diff_ex(nonplanar_projection, layers[i]->regions[region_id]->slices, false);
+
+            //collect all nonplanar surface candidates from the other layers
+            size_t j;
+            std::vector<ExPolygons> nonplar_candidates;
+            for (j = i-1; j >= 1; j--) {
+                if (minZ >= layers[j]->print_z+layers[j]->height) break;
+
+                ExPolygons layerm_slices_surfaces_copy = layers[j]->regions[region_id]->slices;
+
+                //debug output
+                // SVG svg("svg/layer_" + std::to_string(layers[i]->id()) + "_" + std::to_string(j) + "_" + std::to_string(layers[j]->print_z) + ".svg");
+                // svg.draw_outline(layerm_slices_surfaces_copy, "blue");
+                // svg.draw(nonplanar_projection, "black", 0.3);
+                // svg.draw(intersection_ex(nonplanar_projection, layerm_slices_surfaces_copy,false) , "green", 0.3);
+
+                ExPolygons candidate = intersection_ex(nonplanar_projection,
+                        diff_ex(layerm_slices_surfaces_copy, layers[j]->upper_layer->regions[region_id]->slices, false), false);
+
+                //select intersection of top most region and nonplanar projection
+                nonplar_candidates.push_back(candidate);
+                
+                //remove new found region from projection
+                if (candidate.size() > 0){
+                    nonplanar_projection = diff_ex(nonplanar_projection, candidate, false);
+                }
+                // svg.draw(candidate , "red", 0.3);
+                // for(auto& c:nonplar_candidates) {
+                //     svg.draw(c, "yellow", 0.3);
+                // }
+                // //debug output
+                // svg.arrows = false;
+                // svg.Close();
+            }
+
+            //remove them from the old layers and append them to the home layer
+            for (j=j+1; j < i ; j++){
+                ExPolygons candidate = nonplar_candidates[i-j-1];
+                if (candidate.size() > 0){
+                    //save surfaces
+                    ExPolygons layerm_slices_surfaces_copy = layers[j]->regions[region_id]->slices;
+
+                    //clear layer
+                    layers[j]->regions[region_id]->slices.clear();
+
+                    // append internal surfaces without the found topNonplanar surfaces
+                    layers[j]->regions[region_id]->slices.append(diff_ex(layerm_slices_surfaces_copy, candidate, false), stInternal);
+
+                    //append nonplanar layers to home layer
+                    home_layerm.slices.append(candidate, stTopNonplanar);
+                }
+            }
+        }
+    }
+    //set typed_slices to true to force merge
+    this->typed_slices = true;
+}
+
+void
+PrintObject::project_nonplanar_surfaces()
+{
+    //skip if not active
+    if(!this->config.nonplanar_layers.value) return;
+
+    //TODO check when steps should be invalidated
+    if (this->state.is_done(posNonplanarProjection)) return;
+    this->state.set_started(posNonplanarProjection);
+    parallelize<Layer*>(
+        std::queue<Layer*>(std::deque<Layer*>(this->layers.begin(), this->layers.end())),  // cast LayerPtrs to std::queue<Layer*>
+        boost::bind(&Slic3r::Layer::project_nonplanar_surfaces, _1),
+        this->_print->config.threads.value
+    );
+
+    this->state.set_done(posNonplanarProjection);
 }
 
 void
@@ -369,10 +645,10 @@ PrintObject::bridge_over_infill()
 {
     FOREACH_REGION(this->_print, region) {
         const size_t region_id = region - this->_print->regions.begin();
-        
+
         // skip bridging in case there are no voids
         if ((*region)->config.fill_density.value == 100) continue;
-        
+
         // get bridge flow
         const Flow bridge_flow = (*region)->flow(
             frSolidInfill,
@@ -382,28 +658,28 @@ PrintObject::bridge_over_infill()
             -1,     // custom width, not relevant for bridge flow
             *this
         );
-        
+
         // get the average extrusion volume per surface unit
         const double mm3_per_mm  = bridge_flow.mm3_per_mm();
         const double mm3_per_mm2 = mm3_per_mm / bridge_flow.width;
-        
+
         FOREACH_LAYER(this, layer_it) {
             // skip first layer
             if (layer_it == this->layers.begin()) continue;
-            
+
             Layer* layer        = *layer_it;
             LayerRegion* layerm = layer->get_region(region_id);
-            
+
             // extract the stInternalSolid surfaces that might be transformed into bridges
             Polygons internal_solid;
             layerm->fill_surfaces.filter_by_type(stInternalSolid, &internal_solid);
             if (internal_solid.empty()) continue;
-            
+
             // check whether we should bridge or not according to density
             {
                 // get the normal solid infill flow we would use if not bridging
                 const Flow normal_flow = layerm->flow(frSolidInfill, false);
-                
+
                 // Bridging over sparse infill has two purposes:
                 // 1) cover better the gaps of internal sparse infill, especially when
                 //    printing at very low densities;
@@ -429,66 +705,66 @@ PrintObject::bridge_over_infill()
                     ),
                     min_threshold
                 );
-                
+
                 if ((*region)->config.fill_density.value > density_threshold) continue;
             }
-            
+
             // check whether the lower area is deep enough for absorbing the extra flow
             // (for obvious physical reasons but also for preventing the bridge extrudates
             // from overflowing in 3D preview)
             ExPolygons to_bridge;
             {
                 Polygons to_bridge_pp = internal_solid;
-                
+
                 // Only bridge where internal infill exists below the solid shell matching
                 // these two conditions:
                 // 1) its depth is at least equal to our bridge extrusion diameter;
                 // 2) its free volume (thus considering infill density) is at least equal
                 //    to the volume needed by our bridge flow.
                 double excess_mm3_per_mm2 = mm3_per_mm2;
-                
+
                 // iterate through lower layers spanned by bridge_flow
                 const double bottom_z = layer->print_z - bridge_flow.height;
                 for (int i = (layer_it - this->layers.begin()) - 1; i >= 0; --i) {
                     const Layer* lower_layer = this->layers[i];
-                    
+
                     // subtract the void volume of this layer
                     excess_mm3_per_mm2 -= lower_layer->height * (100 - (*region)->config.fill_density.value)/100;
-                    
+
                     // stop iterating if both conditions are matched
                     if (lower_layer->print_z < bottom_z && excess_mm3_per_mm2 <= 0) break;
-                    
+
                     // iterate through regions and collect internal surfaces
                     Polygons lower_internal;
                     FOREACH_LAYERREGION(lower_layer, lower_layerm_it)
                         (*lower_layerm_it)->fill_surfaces.filter_by_type(stInternal, &lower_internal);
-                    
+
                     // intersect such lower internal surfaces with the candidate solid surfaces
                     to_bridge_pp = intersection(to_bridge_pp, lower_internal);
                 }
-                
+
                 // don't bridge if the volume condition isn't matched
                 if (excess_mm3_per_mm2 > 0) continue;
-                
+
                 // there's no point in bridging too thin/short regions
                 {
                     const double min_width = bridge_flow.scaled_width() * 3;
                     to_bridge_pp = offset2(to_bridge_pp, -min_width, +min_width);
                 }
-                
+
                 if (to_bridge_pp.empty()) continue;
-                
+
                 // convert into ExPolygons
                 to_bridge = union_ex(to_bridge_pp);
             }
-            
+
             #ifdef SLIC3R_DEBUG
             printf("Bridging %zu internal areas at layer %zu\n", to_bridge.size(), layer->id());
             #endif
-            
+
             // compute the remaning internal solid surfaces as difference
             const ExPolygons not_to_bridge = diff_ex(internal_solid, to_polygons(to_bridge), true);
-            
+
             // build the new collection of fill_surfaces
             {
                 Surfaces new_surfaces;
@@ -496,16 +772,16 @@ PrintObject::bridge_over_infill()
                     if (surface->surface_type != stInternalSolid)
                         new_surfaces.push_back(*surface);
                 }
-                
+
                 for (ExPolygons::const_iterator ex = to_bridge.begin(); ex != to_bridge.end(); ++ex)
                     new_surfaces.push_back(Surface(stInternalBridge, *ex));
-                
+
                 for (ExPolygons::const_iterator ex = not_to_bridge.begin(); ex != not_to_bridge.end(); ++ex)
                     new_surfaces.push_back(Surface(stInternalSolid, *ex));
-                
+
                 layerm->fill_surfaces.surfaces = new_surfaces;
             }
-            
+
             /*
             # exclude infill from the layers below if needed
             # see discussion at https://github.com/alexrj/Slic3r/issues/240
@@ -534,7 +810,7 @@ PrintObject::bridge_over_infill()
                         $lower_layerm->fill_surfaces->clear;
                         $lower_layerm->fill_surfaces->append($_) for @new_surfaces;
                     }
-                    
+
                     $excess -= $self->get_layer($i)->height;
                 }
             }
@@ -562,9 +838,9 @@ std::vector<coordf_t> PrintObject::generate_object_layers(coordf_t first_layer_h
     std::vector<coordf_t> result;
 
     // collect values from config
-    coordf_t min_nozzle_diameter = 1.0;
+    coordf_t min_nozzle_diameter = std::numeric_limits<double>::max();
     coordf_t min_layer_height = 0.0;
-    coordf_t max_layer_height = 10.0;
+    coordf_t max_layer_height = std::numeric_limits<double>::max();
     std::set<size_t> object_extruders = this->_print->object_extruders();
     for (std::set<size_t>::const_iterator it_extruder = object_extruders.begin(); it_extruder != object_extruders.end(); ++ it_extruder) {
         min_nozzle_diameter = std::min(min_nozzle_diameter, this->_print->config.nozzle_diameter.get_at(*it_extruder));
@@ -733,7 +1009,6 @@ void PrintObject::_slice()
     coordf_t raft_height = 0;
     coordf_t first_layer_height = this->config.first_layer_height.get_abs_value(this->config.layer_height.value);
 
-
     // take raft layers into account
     int id = 0;
 
@@ -829,6 +1104,8 @@ void PrintObject::_slice()
         }
     }
 
+    this->find_nonplanar_surfaces();
+
     // remove last layer(s) if empty
     bool done = false;
     while (! this->layers.empty()) {
@@ -843,7 +1120,7 @@ void PrintObject::_slice()
         }
         this->delete_layer(int(this->layers.size()) - 1);
     }
-    
+
     // Apply size compensation and perform clipping of multi-part objects.
     const coord_t xy_size_compensation = scale_(this->config.xy_size_compensation.value);
     for (Layer* layer : this->layers) {
@@ -862,26 +1139,26 @@ void PrintObject::_slice()
                 for (size_t region_id = 0; region_id < layer->regions.size(); ++region_id) {
                     LayerRegion* layerm = layer->regions[region_id];
                     Polygons slices = layerm->slices;
-                    
+
                     if (abs(xy_size_compensation) > 0)
                         slices = offset(slices, xy_size_compensation);
-                    
+
                     if (region_id > 0)
                         // Trim by the slices of already processed regions.
                         slices = diff(std::move(slices), processed);
-                    
+
                     if (region_id + 1 < layer->regions.size())
                         // Collect the already processed regions to trim the to be processed regions.
                         append_to(processed, slices);
-                    
+
                     layerm->slices.set(union_ex(slices), stInternal);
                 }
             }
         }
-        
+
         // Merge all regions' slices to get islands, chain them by a shortest path.
         layer->make_slices();
-        
+
         // Apply regions overlap
         if (this->config.regions_overlap.value > 0) {
             const coord_t delta = scale_(this->config.regions_overlap.value)/2;
@@ -897,6 +1174,86 @@ void PrintObject::_slice()
     }
 }
 
+void
+PrintObject::find_nonplanar_surfaces()
+{
+    //skip if not active
+    if(!this->config.nonplanar_layers.value) return;
+
+    //Itterate over all model volumes
+    const ModelVolumePtrs volumes = this->model_object()->volumes;
+    for (ModelVolumePtrs::const_iterator it = volumes.begin(); it != volumes.end(); ++ it) {
+        //only check non modifier volumes
+        if (! (*it)->modifier) {
+            const TriangleMesh mesh = (*it)->mesh;
+            std::map<int, NonplanarFacet> facets;
+            //store all meshes with slope <= nonplanar_layers_angle in map. Map is necessary to keep facet ID
+            float min_angle = std::cos(std::min(this->config.nonplanar_layers_collision_angle.value, this->config.nonplanar_layers_angle.value) * 3.14159265/180.0);
+            for (int i = 0; i < mesh.stl.stats.number_of_facets; ++ i) {
+                stl_facet* facet = mesh.stl.facet_start + i;
+                //TODO check if normals exist
+                if (facet->normal.z >= min_angle) {
+                    //copy facet
+                    NonplanarFacet new_facet;
+                    new_facet.normal.x = facet->normal.x;
+                    new_facet.normal.y = facet->normal.y;
+                    new_facet.normal.z = facet->normal.z;
+                    stl_neighbors* neighbors = mesh.stl.neighbors_start + i;
+                    for (int j=0; j<=2 ;j++) {
+                        new_facet.vertex[j].x = facet->vertex[j].x;
+                        new_facet.vertex[j].y = facet->vertex[j].y;
+                        new_facet.vertex[j].z = facet->vertex[j].z;
+                        new_facet.neighbor[j] = neighbors->neighbor[j];
+                    }
+                    new_facet.calculate_stats();
+                    facets[i] = new_facet;
+                }
+            }
+            //create nonplanar surface from
+            NonplanarSurface nf = NonplanarSurface(facets);
+
+            //group surfaces and attach all nonplanar surfaces to the PrintObject
+            this->nonplanar_surfaces = nf.group_surfaces();
+
+            //check if surfaces maintain maximum printing height, if not, erase it
+            for (NonplanarSurfaces::iterator it = this->nonplanar_surfaces.begin(); it!=this->nonplanar_surfaces.end();) {
+                if((*it).check_max_printing_height(this->config.nonplanar_layers_height.value)) {
+                    it = this->nonplanar_surfaces.erase(it);
+                }else {
+                    it++;
+                }
+            }
+
+            //check if surfaces area is not too small
+            if (this->config.nonplanar_minimal_area.value > 0.0) {
+                for (NonplanarSurfaces::iterator it = this->nonplanar_surfaces.begin(); it!=this->nonplanar_surfaces.end();) {
+                    if((*it).check_surface_area(this->config.nonplanar_minimal_area.value)) {
+                        it = this->nonplanar_surfaces.erase(it);
+                    }else {
+                        it++;
+                    }
+                }
+            }
+
+            //Move facets to 0,0,0
+            for (auto& surface : this->nonplanar_surfaces) {
+                surface.translate(-mesh.stl.stats.min.x,-mesh.stl.stats.min.y,-mesh.stl.stats.min.z);
+            }
+
+            //check if surfaces areas collide
+            if (this->config.nonplanar_layers_collision_angle < 90.0) {
+                for (NonplanarSurfaces::iterator it = this->nonplanar_surfaces.begin(); it!=this->nonplanar_surfaces.end();) {
+                    if(check_nonplanar_collisions((*it),std::distance(nonplanar_surfaces.begin(), it))) {
+                        it = this->nonplanar_surfaces.erase(it);
+                    }else {
+                        it++;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // called from slice()
 std::vector<ExPolygons>
 PrintObject::_slice_region(size_t region_id, std::vector<float> z, bool modifier)
@@ -904,23 +1261,23 @@ PrintObject::_slice_region(size_t region_id, std::vector<float> z, bool modifier
     std::vector<ExPolygons> layers;
     std::vector<int> &region_volumes = this->region_volumes[region_id];
     if (region_volumes.empty()) return layers;
-    
+
     ModelObject &object = *this->model_object();
-    
+
     // compose mesh
     TriangleMesh mesh;
     for (std::vector<int>::const_iterator it = region_volumes.begin();
         it != region_volumes.end(); ++it) {
-        
+
         const ModelVolume &volume = *object.volumes[*it];
         if (volume.modifier != modifier) continue;
-        
+
         mesh.merge(volume.mesh);
     }
     if (mesh.facets_count() == 0) return layers;
 
     // transform mesh
-    // we ignore the per-instance transformations currently and only 
+    // we ignore the per-instance transformations currently and only
     // consider the first one
     object.instances[0]->transform_mesh(&mesh, true);
 
@@ -930,7 +1287,7 @@ PrintObject::_slice_region(size_t region_id, std::vector<float> z, bool modifier
         -unscale(this->_copies_shift.y),
         -object.bounding_box().min.z
     );
-    
+
     // perform actual slicing
     TriangleMeshSlicer<Z>(&mesh).slice(z, &layers);
     return layers;
@@ -941,10 +1298,10 @@ PrintObject::_make_perimeters()
 {
     if (this->state.is_done(posPerimeters)) return;
     this->state.set_started(posPerimeters);
-    
+
     // merge slices if they were split into types
     // This is not currently taking place because since merge_slices + detect_surfaces_type
-    // are not truly idempotent we are invalidating posSlice here (see the Perl part of 
+    // are not truly idempotent we are invalidating posSlice here (see the Perl part of
     // this method).
     if (this->typed_slices) {
         // merge_slices() undoes detect_surfaces_type()
@@ -953,10 +1310,10 @@ PrintObject::_make_perimeters()
         this->typed_slices = false;
         this->state.invalidate(posDetectSurfaces);
     }
-    
+
     // compare each layer to the one below, and mark those slices needing
     // one additional inner perimeter, like the top of domed objects-
-    
+
     // this algorithm makes sure that at least one perimeter is overlapping
     // but we don't generate any extra perimeter if fill density is zero, as they would be floating
     // inside the object - infill_only_where_needed should be the method of choice for printing
@@ -964,41 +1321,41 @@ PrintObject::_make_perimeters()
     FOREACH_REGION(this->_print, region_it) {
         size_t region_id = region_it - this->_print->regions.begin();
         const PrintRegion &region = **region_it;
-        
+
         if (!region.config.extra_perimeters
             || region.config.perimeters == 0
             || region.config.fill_density == 0
             || this->layer_count() < 2) continue;
-        
+
         for (size_t i = 0; i <= (this->layer_count()-2); ++i) {
             LayerRegion &layerm                     = *this->get_layer(i)->get_region(region_id);
             const LayerRegion &upper_layerm         = *this->get_layer(i+1)->get_region(region_id);
-            
+
             // In order to avoid diagonal gaps (GH #3732) we ignore the external half of the upper
             // perimeter, since it's not truly covering this layer.
             const Polygons upper_layerm_polygons = offset(
                 upper_layerm.slices,
                 -upper_layerm.flow(frExternalPerimeter).scaled_width()/2
             );
-            
+
             // Filter upper layer polygons in intersection_ppl by their bounding boxes?
             // my $upper_layerm_poly_bboxes= [ map $_->bounding_box, @{$upper_layerm_polygons} ];
             double total_loop_length = 0;
             for (Polygons::const_iterator it = upper_layerm_polygons.begin(); it != upper_layerm_polygons.end(); ++it)
                 total_loop_length += it->length();
-            
+
             const coord_t perimeter_spacing     = layerm.flow(frPerimeter).scaled_spacing();
             const Flow ext_perimeter_flow       = layerm.flow(frExternalPerimeter);
             const coord_t ext_perimeter_width   = ext_perimeter_flow.scaled_width();
             const coord_t ext_perimeter_spacing = ext_perimeter_flow.scaled_spacing();
-            
+
             for (Surfaces::iterator slice = layerm.slices.surfaces.begin();
                 slice != layerm.slices.surfaces.end(); ++slice) {
                 while (true) {
                     // compute the total thickness of perimeters
                     const coord_t perimeters_thickness = ext_perimeter_width/2 + ext_perimeter_spacing/2
                         + (region.config.perimeters-1 + slice->extra_perimeters) * perimeter_spacing;
-                    
+
                     // define a critical area where we don't want the upper slice to fall into
                     // (it should either lay over our perimeters or outside this area)
                     const coord_t critical_area_depth = perimeter_spacing * 1.5;
@@ -1006,13 +1363,13 @@ PrintObject::_make_perimeters()
                         offset(slice->expolygon, -perimeters_thickness),
                         offset(slice->expolygon, -(perimeters_thickness + critical_area_depth))
                     );
-                    
+
                     // check whether a portion of the upper slices falls inside the critical area
                     const Polylines intersection = intersection_pl(
                         upper_layerm_polygons,
                         critical_area
                     );
-                    
+
                     // only add an additional loop if at least 30% of the slice loop would benefit from it
                     {
                         double total_intersection_length = 0;
@@ -1020,7 +1377,7 @@ PrintObject::_make_perimeters()
                             total_intersection_length += it->length();
                         if (total_intersection_length <= total_loop_length*0.3) break;
                     }
-                    
+
                     /*
                     if (0) {
                         require "Slic3r/SVG.pm";
@@ -1032,10 +1389,10 @@ PrintObject::_make_perimeters()
                         );
                     }
                     */
-                    
+
                     slice->extra_perimeters++;
                 }
-                
+
                 #ifdef DEBUG
                     if (slice->extra_perimeters > 0)
                         printf("  adding %d more perimeter(s) at layer %zu\n", slice->extra_perimeters, i);
@@ -1043,20 +1400,20 @@ PrintObject::_make_perimeters()
             }
         }
     }
-    
+
     parallelize<Layer*>(
         std::queue<Layer*>(std::deque<Layer*>(this->layers.begin(), this->layers.end())),  // cast LayerPtrs to std::queue<Layer*>
         boost::bind(&Slic3r::Layer::make_perimeters, _1),
         this->_print->config.threads.value
     );
-    
+
     /*
         simplify slices (both layer and region slices),
         we only need the max resolution for perimeters
     ### This makes this method not-idempotent, so we keep it disabled for now.
     ###$self->_simplify_slices(&Slic3r::SCALED_RESOLUTION);
     */
-    
+
     this->state.set_done(posPerimeters);
 }
 
@@ -1065,17 +1422,17 @@ PrintObject::_infill()
 {
     if (this->state.is_done(posInfill)) return;
     this->state.set_started(posInfill);
-    
+
     parallelize<Layer*>(
         std::queue<Layer*>(std::deque<Layer*>(this->layers.begin(), this->layers.end())),  // cast LayerPtrs to std::queue<Layer*>
         boost::bind(&Slic3r::Layer::make_fills, _1),
         this->_print->config.threads.value
     );
-    
+
     /*  we could free memory now, but this would make this step not idempotent
     ### $_->fill_surfaces->clear for map @{$_->regions}, @{$object->layers};
     */
-    
+
     this->state.set_done(posInfill);
 }
 

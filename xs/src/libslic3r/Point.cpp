@@ -6,10 +6,11 @@
 
 namespace Slic3r {
 
-Point::Point(double x, double y)
+Point::Point(double x, double y, double z)
 {
     this->x = lrint(x);
     this->y = lrint(y);
+    this->z = lrint(z);
 }
 
 bool
@@ -22,7 +23,7 @@ std::string
 Point::wkt() const
 {
     std::ostringstream ss;
-    ss << "POINT(" << this->x << " " << this->y << ")";
+    ss << "POINT(" << this->x << " " << this->y << " " << this->z << ")";
     return ss.str();
 }
 
@@ -30,7 +31,7 @@ std::string
 Point::dump_perl() const
 {
     std::ostringstream ss;
-    ss << "[" << this->x << "," << this->y << "]";
+    ss << "[" << this->x << "," << this->y << "," << this->z << "]";
     return ss.str();
 }
 
@@ -39,6 +40,7 @@ Point::scale(double factor)
 {
     this->x *= factor;
     this->y *= factor;
+    this->z *= factor;
 }
 
 void
@@ -46,6 +48,13 @@ Point::translate(double x, double y)
 {
     this->x += x;
     this->y += y;
+}
+
+void
+Point::translate(double x, double y, double z)
+{
+    this->translate(x,y);
+    this->z += z;
 }
 
 void
@@ -179,7 +188,8 @@ Point::distance_to(const Point &point) const
 {
     double dx = ((double)point.x - this->x);
     double dy = ((double)point.y - this->y);
-    return sqrt(dx*dx + dy*dy);
+    double dz = ((double)point.z - this->z);
+    return sqrt(dx*dx + dy*dy + dz*dz);
 }
 
 /* distance to the closest point of line */
@@ -188,19 +198,21 @@ Point::distance_to(const Line &line) const
 {
     const double dx = line.b.x - line.a.x;
     const double dy = line.b.y - line.a.y;
-    
-    const double l2 = dx*dx + dy*dy;  // avoid a sqrt
+    const double dz = line.b.z - line.a.z;
+
+    const double l2 = dx*dx + dy*dy + dz*dz;  // avoid a sqrt
     if (l2 == 0.0) return this->distance_to(line.a);   // line.a == line.b case
     
     // Consider the line extending the segment, parameterized as line.a + t (line.b - line.a).
     // We find projection of this point onto the line. 
     // It falls where t = [(this-line.a) . (line.b-line.a)] / |line.b-line.a|^2
-    const double t = ((this->x - line.a.x) * dx + (this->y - line.a.y) * dy) / l2;
+    const double t = ((this->x - line.a.x) * dx + (this->y - line.a.y) * dy  + (this->z - line.a.z) * dz) / l2;
     if (t < 0.0)      return this->distance_to(line.a);  // beyond the 'a' end of the segment
     else if (t > 1.0) return this->distance_to(line.b);  // beyond the 'b' end of the segment
     Point projection(
         line.a.x + t * dx,
-        line.a.y + t * dy
+        line.a.y + t * dy,
+        line.a.z + t * dz
     );
     return this->distance_to(projection);
 }
@@ -329,19 +341,65 @@ Point::align_to_grid(const Point &spacing, const Point &base)
 Point
 operator+(const Point& point1, const Point& point2)
 {
-    return Point(point1.x + point2.x, point1.y + point2.y);
+    return Point(point1.x + point2.x, point1.y + point2.y, point1.z + point2.z);
 }
 
 Point
 operator-(const Point& point1, const Point& point2)
 {
-    return Point(point1.x - point2.x, point1.y - point2.y);
+    return Point(point1.x - point2.x, point1.y - point2.y, point1.z - point2.z);
 }
 
 Point
 operator*(double scalar, const Point& point2)
 {
-    return Point(scalar * point2.x, scalar * point2.y);
+    return Point(scalar * point2.x, scalar * point2.y, scalar * point2.z);
+}
+
+bool
+Point3::operator==(const Point3& rhs) const
+{
+    return this->coincides_with(rhs);
+}
+
+std::string
+Point3::wkt() const
+{
+    std::ostringstream ss;
+    ss << "POINT3(" << this->x << " " << this->y << " " << this->z << ")";
+    return ss.str();
+}
+
+void
+Point3::scale(double factor)
+{
+    Point::scale(factor);
+    this->z *= factor;
+}
+
+void
+Point3::translate(double x, double y, double z)
+{
+    Point::translate(x, y);
+    this->z += z;
+}
+
+void
+Point3::translate(const Vector3 &vector)
+{
+    this->translate(vector.x, vector.y, vector.z);
+}
+
+void
+Point3::rotate_z(double angle)
+{
+    Point::rotate(angle);
+}
+
+void
+Point3::rotate_z(double angle, const Point3 &center)
+{
+    Point::rotate(angle, Point(center.x, center.y));
 }
 
 std::ostream&
@@ -420,6 +478,14 @@ Pointf::vector_to(const Pointf &point) const
     return Vectorf(point.x - this->x, point.y - this->y);
 }
 
+std::string
+Pointf3::wkt() const
+{
+    std::ostringstream ss;
+    ss << "POINTF3(" << this->x << " " << this->y << " " << this->z << ")";
+    return ss.str();
+}
+
 std::ostream&
 operator<<(std::ostream &stm, const Pointf3 &pointf3)
 {
@@ -444,6 +510,18 @@ Pointf3::translate(double x, double y, double z)
 {
     Pointf::translate(x, y);
     this->z += z;
+}
+
+void
+Pointf3::rotate_z(double angle)
+{
+    Pointf::rotate(angle);
+}
+
+void
+Pointf3::rotate_z(double angle, const Pointf3 &center)
+{
+    Pointf::rotate(angle, Pointf(center.x, center.y));
 }
 
 double
