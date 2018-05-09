@@ -173,6 +173,7 @@
 
 
 %typemap{Points};
+%typemap{Point3s};
 %typemap{Pointfs};
 %typemap{Lines};
 %typemap{Polygons};
