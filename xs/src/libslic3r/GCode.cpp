@@ -587,6 +587,11 @@ GCode::_extrude(ExtrusionPath path, std::string description, double speed)
 
             gcode += this->writer.extrude_to_xy(
                 this->point_to_gcode(line->b),
+                
+            //TODO: Check what to do here, Zip o mat changed this to get nonplaner working     
+            //gcode += this->writer.extrude_to_xyz(
+            //    this->point3_to_gcode(line->b),
+                
                 e_per_mm * line_length,
                 comment
             );
@@ -799,3 +804,16 @@ GCode::cog_stats() {
 
     return gcode;
 }
+
+// convert a model-space scaled point into G-code coordinates
+Pointf3
+GCode::point3_to_gcode(const Point &point)
+{
+    Pointf extruder_offset = EXTRUDER_CONFIG(extruder_offset);
+    return Pointf3(
+        unscale(point.x) + this->origin.x - extruder_offset.x,
+        unscale(point.y) + this->origin.y - extruder_offset.y,
+        unscale(point.z) //TODO Origin?
+    );
+}
+

@@ -139,6 +139,7 @@ class GCode {
     Pointf point_to_gcode(const Point &point);
     Pointf3 get_cog();
     std::string cog_stats();
+    Pointf3 point3_to_gcode(const Point &point);
     
     private:
     Point _last_pos;

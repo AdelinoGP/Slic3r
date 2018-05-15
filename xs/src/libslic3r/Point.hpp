@@ -35,24 +35,27 @@ class Point
     public:
     coord_t x;
     coord_t y;
-    constexpr Point(coord_t _x = 0, coord_t _y = 0): x(_x), y(_y) {};
-    constexpr Point(int _x, int _y): x(_x), y(_y) {};
+    //TODO: Find a way of doing nonplanar without changing this to XYZ
+    coord_t z;
+    constexpr Point(coord_t _x = 0, coord_t _y = 0, coord_t _z = -1): x(_x), y(_y), z(_z) {};
+    constexpr Point(int _x, int _y, int _z): x(_x), y(_y), z(_z) {};
     #ifndef _WIN32
-    constexpr Point(long long _x, long long _y): x(_x), y(_y) {};  // for Clipper
+    constexpr Point(long long _x, long long _y, long long _z): x(_x), y(_y), z(_z) {};  // for Clipper
     #endif 
-    Point(double x, double y);
-    static constexpr Point new_scale(coordf_t x, coordf_t y) {
-        return Point(scale_(x), scale_(y));
+    Point(double x, double y, double z);
+    static constexpr Point new_scale(coordf_t x, coordf_t y, coordf_t z) {
+        return Point(scale_(x), scale_(y), scale_(z));
     };
 
     /// Scale and create a Point from a Pointf.
     static Point new_scale(Pointf p);
-    bool operator==(const Point& rhs) const;
+ 	bool operator==(const Point& rhs) const;
     bool operator!=(const Point& rhs) const { return !(*this == rhs); }
     std::string wkt() const;
     std::string dump_perl() const;
     void scale(double factor);
     void translate(double x, double y);
+    void translate(double x, double y, double z);
     void translate(const Vector &vector);
     void rotate(double angle);
     void rotate(double angle, const Point &center);
@@ -66,7 +69,7 @@ class Point
         p.rotate(angle, center);
         return p;
     }
-    bool coincides_with(const Point &point) const { return this->x == point.x && this->y == point.y; }
+    bool coincides_with(const Point &point) const { return this->x == point.x && this->y == point.y && this->z == point.z; }
     bool coincides_with_epsilon(const Point &point) const;
     int nearest_point_index(const Points &points) const;
     int nearest_point_index(const PointConstPtrs &points) const;
@@ -84,7 +87,7 @@ class Point
     Point projection_onto(const Line &line) const;
     Point negative() const;
     Vector vector_to(const Point &point) const;
-    void align_to_grid(const Point &spacing, const Point &base = Point(0,0));
+    void align_to_grid(const Point &spacing, const Point &base = Point(0,0,0));
 };
 
 std::ostream& operator<<(std::ostream &stm, const Point &point);
@@ -104,6 +107,7 @@ operator+=(Points &dst, const Point &p) {
     return dst;
 };
 
+//TODO remove point3 and Point3f
 class Point3 : public Point
 {
     public:
