@@ -495,7 +495,9 @@ PrintObject::debug_svg_print()
                 if (surface->surface_type == stInternal) color = "brown";
                 if (surface->surface_type == stVoid) color = "purple";
                 svg.draw(surface->expolygon, color, 2.0f);
+                svg.draw_outline(surface->expolygon); //TODO: Not sure if zip-o-mat added this
             }
+ 
             svg.arrows = false;
             svg.Close();
 
@@ -512,6 +514,7 @@ PrintObject::debug_svg_print()
                 if (surface->surface_type == stInternal) color = "brown";
                 if (surface->surface_type == stVoid) color = "purple";
                 svg1.draw(surface->expolygon, color, 2.0f);
+            	svg1.draw_outline(surface->expolygon); //TODO: Not sure if zip-o-mat added this
             }
             svg1.arrows = false;
             svg1.Close();
@@ -944,7 +947,7 @@ void PrintObject::_slice()
 
     //Daniel
     //Max angle of facets
-    float max_angle = 10.0;
+    float max_angle = 20.0;
 
     //Itterate over all model volumes
     const ModelVolumePtrs volumes = this->model_object()->volumes;
