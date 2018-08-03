@@ -38,7 +38,6 @@ class TriangleMesh
     public:
     TriangleMesh();
     TriangleMesh(const Pointf3s &points, const std::vector<Point3> &facets);
-    TriangleMesh(std::vector<stl_facet>& facets);
 
     /// Templated constructor to adapt containers that offer .data() and .size()
     /// First argument is a container (either vector or array) of Pointf3 for the vertex data.
