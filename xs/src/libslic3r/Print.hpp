@@ -20,6 +20,8 @@
 #include "SlicingAdaptive.hpp"
 #include "LayerHeightSpline.hpp"
 #include "SupportMaterial.hpp"
+#include "NonplanarSurface.hpp"
+#include "NonplanarFacet.hpp"
 
 namespace Slic3r {
 
@@ -95,7 +97,7 @@ class PrintObject
 
     LayerHeightSpline layer_height_spline;
 
-    std::map<int, stl_facet> nonplanar_surfaces;
+    NonplanarSurfaces nonplanar_surfaces;
 
     /// this is set to true when LayerRegion->slices is split in top/internal/bottom
     /// so that next call to make_perimeters() performs a union() before computing loops

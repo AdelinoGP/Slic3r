@@ -248,6 +248,8 @@ xsp/Model.xsp
 xsp/MotionPlanner.xsp
 xsp/my.map
 xsp/mytype.map
+xsp/NonplanarFacet.xsp
+xsp/NonplanarSurface.xsp
 xsp/PerimeterGenerator.xsp
 xsp/PlaceholderParser.xsp
 xsp/Point.xsp
