@@ -437,6 +437,7 @@ sub options {
     return qw(
         layer_height first_layer_height
         adaptive_slicing adaptive_slicing_quality match_horizontal_surfaces
+        nonplanar_layers nonplanar_layers_angle nonplanar_layers_height
         perimeters spiral_vase
         top_solid_layers bottom_solid_layers
         extra_perimeters avoid_crossing_perimeters thin_walls overhangs
@@ -516,6 +517,12 @@ sub build {
             $optgroup->append_single_option_line('adaptive_slicing_quality');
             $optgroup->get_field('adaptive_slicing_quality')->set_scale(1);
             $optgroup->append_single_option_line('match_horizontal_surfaces');
+        }
+        {
+            my $optgroup = $page->new_optgroup('Nonplanar layers');
+            $optgroup->append_single_option_line('nonplanar_layers');
+            $optgroup->append_single_option_line('nonplanar_layers_angle');
+            $optgroup->append_single_option_line('nonplanar_layers_height');
         }
         {
             my $optgroup = $page->new_optgroup('Vertical shells');
@@ -888,6 +895,10 @@ sub _update {
             for qw(layer_height);
     }
 
+    my $have_nonplanar_layers = $config->nonplanar_layers;
+    $self->get_field($_)->toggle($have_nonplanar_layers)
+        for qw(nonplanar_layers_angle nonplanar_layers_height);
+        
     my $have_infill = $config->fill_density > 0;
     if (any { /$opt_key/ } qw(all_keys fill_density)) {
         # infill_extruder uses the same logic as in Print::extruders()
