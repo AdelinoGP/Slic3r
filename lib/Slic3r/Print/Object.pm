@@ -160,6 +160,7 @@ sub detect_nonplanar_surfaces {
     $self->slice;
 
     # Detect nonplanar surfaces areas and move them to the heighest layer of the nonplanar_surface
+    $self->print->status_cb->(25, "Move nonplanar surfaces up");
     $self->move_nonplanar_surfaces_up;
 }
 
@@ -205,7 +206,7 @@ sub prepare_infill {
     $self->combine_infill;
 
     $self->set_step_done(STEP_PREPARE_INFILL);
-    $self->debug_svg_print;
+    #$self->debug_svg_print;
 }
 
 sub infill {
@@ -216,6 +217,7 @@ sub infill {
 
     $self->_infill;
     
+    $self->print->status_cb->(35, "Project nonplanar surfaces down");
     $self->project_nonplanar_surfaces;
 }
 
