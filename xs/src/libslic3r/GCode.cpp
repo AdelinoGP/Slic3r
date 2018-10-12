@@ -578,6 +578,8 @@ GCode::_extrude(ExtrusionPath path, std::string description, double speed)
         Lines lines = path.polyline.lines();
         for (Lines::const_iterator line = lines.begin(); line != lines.end(); ++line) {
             const double line_length = line->length() * SCALING_FACTOR;
+            const double multiplicator = std::cos(line->angle());
+            std::cout << multiplicator << '\n';
             path_length += line_length;
 
             this->_cog.x += (this->point_to_gcode(line->a).x + this->point_to_gcode(line->b).x)/2 * line_length;
@@ -591,6 +593,7 @@ GCode::_extrude(ExtrusionPath path, std::string description, double speed)
             //TODO: Check what to do here, Zip o mat changed this to get nonplaner working     
             //gcode += this->writer.extrude_to_xyz(
             //    this->point3_to_gcode(line->b),
+            //    e_per_mm * line_length * multiplicator,
                 
                 e_per_mm * line_length,
                 comment
