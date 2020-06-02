@@ -24,7 +24,7 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 set(Boost_NO_BOOST_CMAKE ON)
-find_package(Boost REQUIRED COMPONENTS system thread filesystem)
+find_package(Boost REQUIRED COMPONENTS system thread filesystem nowide)
 
 set(LIBDIR ${CMAKE_CURRENT_SOURCE_DIR}/../xs/src/)
 
