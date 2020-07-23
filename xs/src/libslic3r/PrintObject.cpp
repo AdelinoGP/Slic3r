@@ -2,14 +2,19 @@
 #include "BoundingBox.hpp"
 #include "ClipperUtils.hpp"
 #include "Geometry.hpp"
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 107300
 #include <boost/bind/bind.hpp>
+#endif
 #include <algorithm>
 #include <vector>
 #include "SVG.hpp"
 
 namespace Slic3r {
 
+#if BOOST_VERSION >= 107300
 using boost::placeholders::_1;
+#endif
 
 PrintObject::PrintObject(Print* print, ModelObject* model_object, const BoundingBoxf3 &modobj_bbox)
 :   layer_height_spline(model_object->layer_height_spline),

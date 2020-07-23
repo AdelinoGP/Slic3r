@@ -24,7 +24,7 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 set(Boost_NO_BOOST_CMAKE ON)
-find_package(Boost REQUIRED COMPONENTS system thread filesystem nowide)
+find_package(Boost REQUIRED COMPONENTS system thread filesystem OPTIONAL_COMPONENTS nowide)
 
 set(LIBDIR ${CMAKE_CURRENT_SOURCE_DIR}/../xs/src/)
 
@@ -99,6 +99,12 @@ add_library(libslic3r STATIC
 add_library(Zip STATIC
     ${LIBDIR}/Zip/ZipArchive.cpp
 )
+target_compile_features(libslic3r PUBLIC cxx_std_11)
+target_include_directories(libslic3r SYSTEM PUBLIC ${SLIC3R_INCLUDES})
+target_include_directories(libslic3r PUBLIC ${LIBSLIC3R_INCLUDES})
+if (BOOST_NOWIDE_FOUND)
+    target_compile_options(libslic3r -DBOOST_INCLUDE_NOWIDE)
+endif()
 
 add_library(BSpline STATIC
     ${LIBDIR}/BSpline/BSpline.cpp
@@ -173,9 +179,23 @@ ENDIF(wxWidgets_FOUND)
 
 # Windows needs a compiled component for Boost.nowide
 IF (WIN32)
+<<<<<<< HEAD
     add_library(boost-nowide STATIC 
         ${LIBDIR}/boost/nowide/iostream.cpp
     )
+=======
+    if (NOT BOOST_NOWIDE_FOUND)
+        add_library(boost-nowide STATIC 
+            ${LIBDIR}/boost/nowide/iostream.cpp
+        )
+        if(MSVC)
+            # Tell boost pragmas to not rename nowide as we are building it
+            add_definitions(-DBOOST_NOWIDE_NO_LIB)
+        endif()    
+        target_link_libraries(slic3r boost-nowide)
+        target_include_directories(boost-nowide PUBLIC ${COMMON_INCLUDES})
+    endif()
+>>>>>>> 1e5c482a5... Patch build to work on Boost 1.73 and older versions as well.
 
     target_link_libraries(slic3r boost-nowide)
     target_link_libraries(extrude-tin boost-nowide)
