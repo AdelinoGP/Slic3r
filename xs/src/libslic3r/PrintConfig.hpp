@@ -35,7 +35,7 @@ enum HostType {
 
 enum InfillPattern {
     ipRectilinear, ipGrid, ipAlignedRectilinear,
-    ipTriangles, ipStars, ipCubic, 
+    ipTriangles, ipStars, ipCubic,
     ipConcentric, ipHoneycomb, ip3DHoneycomb,
     ipGyroid, ipHilbertCurve, ipArchimedeanChords, ipOctagramSpiral,
 };
@@ -126,12 +126,12 @@ class PrintConfigBase : public virtual ConfigBase
     };
     bool set_deserialize(t_config_option_key opt_key, std::string str, bool append = false);
     double min_object_distance() const;
-    
+
     protected:
     void _handle_legacy(t_config_option_key &opt_key, std::string &value) const;
 };
 
-// Slic3r dynamic configuration, used to override the configuration 
+// Slic3r dynamic configuration, used to override the configuration
 // per object, per modification volume or per printing material.
 // The dynamic configuration is also used to store user modifications of the print global parameters,
 // so the modified configuration values may be diffed against the active configuration
@@ -160,6 +160,7 @@ class PrintObjectConfig : public virtual StaticPrintConfig
     ConfigOptionBool                nonplanar_layers;
     ConfigOptionFloat               nonplanar_layers_angle;
     ConfigOptionFloat               nonplanar_layers_collision_angle;
+    ConfigOptionFloat               nonplanar_minimal_area;
     ConfigOptionFloat               nonplanar_layers_height;
     ConfigOptionFloat               nonplanar_layers_ignore_collision_size;
     ConfigOptionBool                dont_support_bridges;
@@ -191,18 +192,19 @@ class PrintObjectConfig : public virtual StaticPrintConfig
     ConfigOptionFloatOrPercent      support_material_threshold;
     ConfigOptionFloat               xy_size_compensation;
     ConfigOptionInt                 sequential_print_priority;
-    
+
     PrintObjectConfig(bool initialize = true) : StaticPrintConfig() {
         if (initialize)
             this->set_defaults();
     }
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(adaptive_slicing);
         OPT_PTR(adaptive_slicing_quality);
         OPT_PTR(nonplanar_layers);
         OPT_PTR(nonplanar_layers_angle);
         OPT_PTR(nonplanar_layers_collision_angle);
+        OPT_PTR(nonplanar_minimal_area);
         OPT_PTR(nonplanar_layers_height);
         OPT_PTR(nonplanar_layers_ignore_collision_size);
         OPT_PTR(dont_support_bridges);
@@ -234,7 +236,7 @@ class PrintObjectConfig : public virtual StaticPrintConfig
         OPT_PTR(support_material_threshold);
         OPT_PTR(xy_size_compensation);
         OPT_PTR(sequential_print_priority);
-        
+
         return NULL;
     };
 };
@@ -277,12 +279,12 @@ class PrintRegionConfig : public virtual StaticPrintConfig
     ConfigOptionEnum<InfillPattern> top_infill_pattern;
     ConfigOptionInt                 top_solid_layers;
     ConfigOptionFloatOrPercent      top_solid_infill_speed;
-    
+
     PrintRegionConfig(bool initialize = true) : StaticPrintConfig() {
         if (initialize)
             this->set_defaults();
     }
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(bottom_infill_pattern);
         OPT_PTR(bottom_solid_layers);
@@ -318,7 +320,7 @@ class PrintRegionConfig : public virtual StaticPrintConfig
         OPT_PTR(top_infill_pattern);
         OPT_PTR(top_solid_infill_speed);
         OPT_PTR(top_solid_layers);
-        
+
         return NULL;
     };
 };
@@ -368,7 +370,7 @@ class GCodeConfig : public virtual StaticPrintConfig
         if (initialize)
             this->set_defaults();
     }
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(before_layer_gcode);
         OPT_PTR(between_objects_gcode);
@@ -409,7 +411,7 @@ class GCodeConfig : public virtual StaticPrintConfig
         
         return NULL;
     };
-    
+
     std::string get_extrusion_axis() const
     {
         if ((this->gcode_flavor.value == gcfMach3) || (this->gcode_flavor.value == gcfMachinekit)) {
@@ -481,12 +483,12 @@ class PrintConfig : public GCodeConfig
     ConfigOptionBools               wipe;
     ConfigOptionFloat               z_offset;
     ConfigOptionFloat               z_steps_per_mm;
-    
+
     PrintConfig(bool initialize = true) : GCodeConfig(false) {
         if (initialize)
             this->set_defaults();
     }
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(avoid_crossing_perimeters);
         OPT_PTR(bed_shape);
@@ -543,11 +545,11 @@ class PrintConfig : public GCodeConfig
         OPT_PTR(wipe);
         OPT_PTR(z_offset);
         OPT_PTR(z_steps_per_mm);
-        
+
         // look in parent class
         ConfigOption* opt;
         if ((opt = GCodeConfig::optptr(opt_key, create)) != NULL) return opt;
-        
+
         return NULL;
     };
 };
@@ -560,19 +562,19 @@ class HostConfig : public virtual StaticPrintConfig
     ConfigOptionString              octoprint_apikey;
     ConfigOptionString              serial_port;
     ConfigOptionInt                 serial_speed;
-    
+
     HostConfig(bool initialize = true) : StaticPrintConfig() {
         if (initialize)
             this->set_defaults();
     }
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(host_type);
         OPT_PTR(print_host);
         OPT_PTR(octoprint_apikey);
         OPT_PTR(serial_port);
         OPT_PTR(serial_speed);
-        
+
         return NULL;
     };
 };
@@ -584,8 +586,8 @@ class FullPrintConfig
     public:
     FullPrintConfig(bool initialize = true) :
         PrintObjectConfig(false),
-        PrintRegionConfig(false), 
-        PrintConfig(false), 
+        PrintRegionConfig(false),
+        PrintConfig(false),
         HostConfig(false)
     {
         if (initialize)
@@ -619,7 +621,7 @@ class SLAPrintConfig
     ConfigOptionFloatOrPercent      support_material_extrusion_width;
     ConfigOptionFloat               support_material_spacing;
     ConfigOptionInt                 threads;
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(fill_angle);
         OPT_PTR(fill_density);
@@ -634,7 +636,7 @@ class SLAPrintConfig
         OPT_PTR(support_material_extrusion_width);
         OPT_PTR(support_material_spacing);
         OPT_PTR(threads);
-        
+
         return NULL;
     };
 };
@@ -669,12 +671,12 @@ class CLIConfig
     ConfigOptionFloat               scale;
     ConfigOptionPoint3              scale_to_fit;
     ConfigOptionBool                threads;
-    
+
     CLIConfig() : ConfigBase(), StaticConfig() {
         this->def = &cli_config_def;
         this->set_defaults();
     };
-    
+
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false) {
         OPT_PTR(cut);
         OPT_PTR(cut_grid);
@@ -694,7 +696,7 @@ class CLIConfig
         OPT_PTR(scale);
         OPT_PTR(scale_to_fit);
         OPT_PTR(threads);
-        
+
         return NULL;
     };
 };
