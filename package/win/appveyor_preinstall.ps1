@@ -1,5 +1,5 @@
 mkdir C:\projects\slic3r\FreeGLUT
-if (!(Test-Path "C:\users\appveyor\freeglut.$env:ARCH.7z")) 
+if (!(Test-Path "C:\users\appveyor\freeglut.$env:ARCH.7z"))
 {
     wget "https://bintray.com/lordofhyphens/Slic3r/download_file?file_path=freeglut-mingw-3.0.0.$env:ARCH.7z" -o C:\users\appveyor\freeglut.$env:ARCH.7z
 }

@@ -96,6 +96,16 @@ PrintConfigDef::PrintConfigDef()
 
 
     def = this->add("avoid_crossing_perimeters", coBool);
+    def->label = "Avoid crossing perimeters";
+    def->category = "Layers and Perimeters";
+    def->tooltip = "Collisions that are smaller than this are ignored during collision check. This reduces false positives but has to be used with caution!";
+    def->sidetext = "mm²";
+    def->cli = "nonplanar_layers_ignore_collision_size=f";
+    def->min = 0;
+    def->default_value = new ConfigOptionFloat(10.0);
+
+
+    def = this->add("avoid_crossing_perimeters", coBool);
     def->label = __TRANS("Avoid crossing perimeters");
     def->category = __TRANS("Layers and Perimeters");
     def->tooltip = __TRANS("Optimize travel moves in order to minimize the crossing of perimeters. This is mostly useful with Bowden extruders which suffer from oozing. This feature slows down both the print and the G-code generation.");
@@ -2069,19 +2079,19 @@ CLITransformConfigDef::CLITransformConfigDef()
     def->tooltip = __TRANS("Cut model at the given Z.");
     def->cli = "cut";
     def->default_value = new ConfigOptionFloat(0);
-    
+
     def = this->add("cut_grid", coFloat);
     def->label = __TRANS("Cut");
     def->tooltip = __TRANS("Cut model in the XY plane into tiles of the specified max size.");
     def->cli = "cut-grid";
     def->default_value = new ConfigOptionPoint();
-    
+
     def = this->add("cut_x", coFloat);
     def->label = __TRANS("Cut");
     def->tooltip = __TRANS("Cut model at the given X.");
     def->cli = "cut-x";
     def->default_value = new ConfigOptionFloat(0);
-    
+
     def = this->add("cut_y", coFloat);
     def->label = __TRANS("Cut");
     def->tooltip = __TRANS("Cut model at the given Y.");

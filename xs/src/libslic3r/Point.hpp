@@ -229,16 +229,16 @@ namespace boost { namespace polygon {
 
     template <>
     struct geometry_concept<Point> { typedef point_concept type; };
-   
+
     template <>
     struct point_traits<Point> {
         typedef coord_t coordinate_type;
-    
+
         static inline coordinate_type get(const Point& point, orientation_2d orient) {
             return (orient == HORIZONTAL) ? point.x : point.y;
         }
     };
-    
+
     template <>
     struct point_mutable_traits<Point> {
         typedef coord_t coordinate_type;
@@ -251,7 +251,7 @@ namespace boost { namespace polygon {
         static inline Point construct(coord_t x_value, coord_t y_value) {
             Point retval;
             retval.x = x_value;
-            retval.y = y_value; 
+            retval.y = y_value;
             return retval;
         }
     };
