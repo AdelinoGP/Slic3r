@@ -26,6 +26,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <boost/predef/other/endian.h>
+
+#ifndef BOOST_ENDIAN_LITTLE_BYTE
+#error "admesh works correctly on little endian machines only!"
+#endif
 
 #if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
     #include "windows.h"
