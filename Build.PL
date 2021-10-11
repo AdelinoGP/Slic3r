@@ -168,7 +168,7 @@ if (@missing_prereqs) {
     if ($res == 0) {
         print "If you also want to use the GUI you can now run `perl Build.PL --gui` to install the required modules.\n";
     } else {
-        print "Some tests failed. Please report the failure to the author!\n";
+        print "Some tests failed. But its OK since this is an experimantal Build. Please continue with `perl Build.PL --gui`\n";
     }
     exit $res;
 }
