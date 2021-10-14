@@ -179,11 +179,6 @@ ENDIF(wxWidgets_FOUND)
 
 # Windows needs a compiled component for Boost.nowide
 IF (WIN32)
-<<<<<<< HEAD
-    add_library(boost-nowide STATIC 
-        ${LIBDIR}/boost/nowide/iostream.cpp
-    )
-=======
     if (NOT BOOST_NOWIDE_FOUND)
         add_library(boost-nowide STATIC 
             ${LIBDIR}/boost/nowide/iostream.cpp
@@ -195,7 +190,6 @@ IF (WIN32)
         target_link_libraries(slic3r boost-nowide)
         target_include_directories(boost-nowide PUBLIC ${COMMON_INCLUDES})
     endif()
->>>>>>> 1e5c482a5... Patch build to work on Boost 1.73 and older versions as well.
 
     target_link_libraries(slic3r boost-nowide)
     target_link_libraries(extrude-tin boost-nowide)
