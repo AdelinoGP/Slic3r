@@ -8,6 +8,7 @@
 #endif
 #include <algorithm>
 #include <vector>
+#include <limits>
 #include "SVG.hpp"
 
 namespace Slic3r {
@@ -837,9 +838,9 @@ std::vector<coordf_t> PrintObject::generate_object_layers(coordf_t first_layer_h
     std::vector<coordf_t> result;
 
     // collect values from config
-    coordf_t min_nozzle_diameter = 1.0;
+    coordf_t min_nozzle_diameter = std::numeric_limits<double>::max();
     coordf_t min_layer_height = 0.0;
-    coordf_t max_layer_height = 10.0;
+    coordf_t max_layer_height = std::numeric_limits<double>::max();
     std::set<size_t> object_extruders = this->_print->object_extruders();
     for (std::set<size_t>::const_iterator it_extruder = object_extruders.begin(); it_extruder != object_extruders.end(); ++ it_extruder) {
         min_nozzle_diameter = std::min(min_nozzle_diameter, this->_print->config.nozzle_diameter.get_at(*it_extruder));
