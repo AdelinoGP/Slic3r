@@ -327,7 +327,7 @@ sub clip_fill_surfaces {
             [
                 # our current internal fill boundaries
                 map $_->p,
-                    grep $_->surface_type == S_TYPE_INTERNAL || $_->surface_type == S_TYPE_INTERNALVOID,
+                    grep $_->surface_type == S_TYPE_INTERNAL || $_->surface_type == S_TYPE_VOID,
                         map @{$_->fill_surfaces}, @{$lower_layer->regions}
             ],
         );
@@ -338,7 +338,7 @@ sub clip_fill_surfaces {
 
             my (@internal, @other) = ();
             foreach my $surface (map $_->clone, @{$layerm->fill_surfaces}) {
-                if ($surface->surface_type == S_TYPE_INTERNAL || $surface->surface_type == S_TYPE_INTERNALVOID) {
+                if ($surface->surface_type == S_TYPE_INTERNAL || $surface->surface_type == S_TYPE_VOID) {
                     push @internal, $surface;
                 } else {
                     push @other, $surface;
@@ -357,7 +357,7 @@ sub clip_fill_surfaces {
 
             push @other, map Slic3r::Surface->new(
                 expolygon       => $_,
-                surface_type    => S_TYPE_INTERNALVOID,
+                surface_type    => S_TYPE_VOID,
             ),
                 @{diff_ex(
                     [ map $_->p, @internal ],
@@ -386,11 +386,11 @@ sub discover_horizontal_shells {
 
             if ($layerm->region->config->solid_infill_every_layers && $layerm->region->config->fill_density > 0
                 && ($i % $layerm->region->config->solid_infill_every_layers) == 0) {
-                my $type = $layerm->region->config->fill_density == 100 ? S_TYPE_INTERNALSOLID : S_TYPE_INTERNALBRIDGE;
+                my $type = $layerm->region->config->fill_density == 100 ? S_TYPE_SOLID : S_TYPE_BRIDGE;
                 $_->surface_type($type) for @{$layerm->fill_surfaces->filter_by_type(S_TYPE_INTERNAL)};
             }
 
-            EXTERNAL: foreach my $type (S_TYPE_TOP, S_TYPE_BOTTOM, S_TYPE_BOTTOMBRIDGE) {
+            EXTERNAL: foreach my $type (S_TYPE_TOP, S_TYPE_BOTTOM, S_TYPE_BRIDGE) {
                 # find slices of current type for current layer
                 # use slices instead of fill_surfaces because they also include the perimeter area
                 # which needs to be propagated in shells; we need to grow slices like we did for
@@ -425,7 +425,7 @@ sub discover_horizontal_shells {
                     # intersections have contours and holes
                     my $new_internal_solid = intersection(
                         $solid,
-                        [ map $_->p, grep { ($_->surface_type == S_TYPE_INTERNAL) || ($_->surface_type == S_TYPE_INTERNALSOLID) } @neighbor_fill_surfaces ],
+                        [ map $_->p, grep { ($_->surface_type == S_TYPE_INTERNAL) || ($_->surface_type == S_TYPE_SOLID) } @neighbor_fill_surfaces ],
                         1,
                     );
                     if (!@$new_internal_solid) {
@@ -499,7 +499,7 @@ sub discover_horizontal_shells {
                     # internal-solid are the union of the existing internal-solid surfaces
                     # and new ones
                     my $internal_solid = union_ex([
-                        ( map $_->p, grep $_->surface_type == S_TYPE_INTERNALSOLID, @neighbor_fill_surfaces ),
+                        ( map $_->p, grep $_->surface_type == S_TYPE_SOLID, @neighbor_fill_surfaces ),
                         @$new_internal_solid,
                     ]);
 
@@ -528,7 +528,7 @@ sub discover_horizontal_shells {
 
                     # assign new internal-solid surfaces to layer
                     $neighbor_fill_surfaces->append($_)
-                        for map Slic3r::Surface->new(expolygon => $_, surface_type => S_TYPE_INTERNALSOLID),
+                        for map Slic3r::Surface->new(expolygon => $_, surface_type => S_TYPE_SOLID),
                             @$internal_solid ;
 
                     # assign new internal-solid_nonplar surfaces to layer
@@ -562,7 +562,7 @@ sub combine_infill {
 
     # define the type used for voids
     my %voidtype = (
-        &S_TYPE_INTERNAL() => S_TYPE_INTERNALVOID,
+        &S_TYPE_INTERNAL() => S_TYPE_VOID,
     );
 
     # work on each region separately
@@ -641,7 +641,7 @@ sub combine_infill {
                      + $layerms[-1]->flow(FLOW_ROLE_PERIMETER)->scaled_width / 2
                      # Because fill areas for rectilinear and honeycomb are grown
                      # later to overlap perimeters, we need to counteract that too.
-                     + (($type == S_TYPE_INTERNALSOLID || $region->config->fill_pattern =~ /(rectilinear|grid|line|honeycomb)/)
+                     + (($type == S_TYPE_SOLID || $region->config->fill_pattern =~ /(rectilinear|grid|line|honeycomb)/)
                        ? $layerms[-1]->flow(FLOW_ROLE_SOLID_INFILL)->scaled_width
                        : 0)
                      )}, @$intersection;

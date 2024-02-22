@@ -43,6 +43,11 @@ class Point
     constexpr Point(long long _x, long long _y, long long _z): x(_x), y(_y), z(_z) {};  // for Clipper
     #endif 
     Point(double x, double y, double z);
+
+    static constexpr Point new_scale(coordf_t x, coordf_t y) {
+        return Point(scale_(x), scale_(y));
+    };
+
     static constexpr Point new_scale(coordf_t x, coordf_t y, coordf_t z) {
         return Point(scale_(x), scale_(y), scale_(z));
     };

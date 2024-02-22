@@ -20,7 +20,7 @@ typedef struct {
 typedef struct {
   mesh_vertex    max;
   mesh_vertex    min;
-} mesh_stats;
+} nonplanar_mesh_stats;
 
 class NonplanarSurface;
 
@@ -30,7 +30,7 @@ class NonplanarSurface
 {
     public:
     std::map<int, NonplanarFacet> mesh;
-    mesh_stats stats;
+    nonplanar_mesh_stats stats;
     NonplanarSurface() {};
     ~NonplanarSurface() {};
     NonplanarSurface(std::map<int, NonplanarFacet> &_mesh);
