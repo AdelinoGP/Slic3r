@@ -47,7 +47,7 @@ class PrintState
 {
     public:
     std::set<StepType> started, done;
-    
+
     bool is_started(StepType step) const;
     bool is_done(StepType step) const;
     void set_started(StepType step);
@@ -70,7 +70,7 @@ class PrintRegion
 
     private:
     Print* _print;
-    
+
     PrintRegion(Print* print);
     ~PrintRegion();
 };
@@ -91,7 +91,7 @@ class PrintObject
     std::map< size_t,std::vector<int> > region_volumes;
     PrintObjectConfig config; //< Configuration
     t_layer_height_ranges layer_height_ranges;
-    
+
     LayerHeightSpline layer_height_spline;
 
     /// this is set to true when LayerRegion->slices is split in top/internal/bottom
@@ -126,7 +126,7 @@ class PrintObject
     BoundingBox bounding_box() const;
     std::set<size_t> extruders() const;
     std::set<size_t> support_material_extruders() const;
-    
+
     // adds region_id, too, if necessary
     void add_region_volume(int region_id, int volume_id);
 
@@ -148,14 +148,16 @@ class PrintObject
     const SupportLayer* get_support_layer(int idx) const { return this->support_layers.at(idx); };
     SupportLayer* add_support_layer(int id, coordf_t height, coordf_t print_z);
     void delete_support_layer(int idx);
-    
+
     // methods for handling state
     bool invalidate_state_by_config(const PrintConfigBase &config);
     bool invalidate_step(PrintObjectStep step);
     bool invalidate_all_steps();
-    
+
     bool has_support_material() const;
     void detect_surfaces_type();
+    void project_nonplanar_surfaces();
+    void debug_svg_print();
     void process_external_surfaces();
 
     void bridge_over_infill();
@@ -165,6 +167,8 @@ class PrintObject
     std::vector<ExPolygons> _slice_region(size_t region_id, std::vector<float> z, bool modifier);
 
     void _infill();
+    void _detect_nonplanar_surfaces();
+
 
     /// Initialize and generate support material.
     void generate_support_material();
@@ -247,7 +251,7 @@ class Print
 
     Print();
     ~Print();
-    
+
     // methods for handling objects
     void clear_objects();
     PrintObject* get_object(size_t idx) { return this->objects.at(idx); };
@@ -278,7 +282,7 @@ class Print
     bool invalidate_step(PrintStep step);
     bool invalidate_all_steps();
     bool step_done(PrintObjectStep step) const;
-    
+
     void add_model_object(ModelObject* model_object, int idx = -1);
     #ifndef SLIC3RXS
     /// Apply a provided configuration to the internal copy
